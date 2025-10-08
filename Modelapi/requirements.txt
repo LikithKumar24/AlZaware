@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+torch
+torchvision
+Pillow
+motor
+certifi
+dnspython
+python-jose[cryptography]
+python-multipart
+passlib[bcrypt]
+email-validator
