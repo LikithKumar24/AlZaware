@@ -5,6 +5,7 @@ from typing import Annotated, Optional, List
 from datetime import datetime, timezone
 import shutil
 import certifi
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -42,6 +43,18 @@ cognitive_test_collection = db.get_collection("cognitive_tests")
 # 2. Pydantic Schemas
 # -------------------
 
+# --- NEW: Schemas for Doctor's Professional Details ---
+class ProfessionalDetailItem(BaseModel):
+    title: str
+    description: str
+
+class DoctorProfessionalDetails(BaseModel):
+    education: List[ProfessionalDetailItem] = []
+    career_history: List[ProfessionalDetailItem] = []
+    specializations: List[str] = []
+    professional_experience: str = ""
+    success_stories: List[ProfessionalDetailItem] = []
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -57,6 +70,7 @@ class UserPublic(BaseModel):
     role: str
     profile_photo_url: Optional[str] = None
     assigned_patients: Optional[List[str]] = None
+    professional_details: Optional[DoctorProfessionalDetails] = None # <-- NEW
 
 class AssessmentCreate(BaseModel):
     prediction: str
@@ -69,7 +83,7 @@ class AssessmentPublic(BaseModel):
     created_at: datetime
     owner_email: str
 
-class HighRiskAssessmentPublic(AssessmentPublic): # <-- NEW SCHEMA
+class HighRiskAssessmentPublic(AssessmentPublic):
     patient_full_name: str
 
 class CognitiveTestResultCreate(BaseModel):
@@ -186,10 +200,11 @@ async def create_user(user: UserCreate):
         "email": user.email, "hashed_password": hashed_password,
         "full_name": user.full_name, "age": user.age, 
         "role": user.role,
-        "profile_photo_url": None
+        "profile_photo_url": None,
     }
     if user.role == "doctor":
         user_data["assigned_patients"] = []
+        user_data["professional_details"] = DoctorProfessionalDetails().model_dump() # <-- NEW
 
     new_user = await user_collection.insert_one(user_data)
     created_user_doc = await user_collection.find_one({"_id": new_user.inserted_id})
@@ -244,12 +259,32 @@ async def upload_profile_photo(current_user: Annotated[dict, Depends(get_current
     updated_user_doc["_id"] = str(updated_user_doc["_id"])
     return UserPublic.model_validate(updated_user_doc)
 
+# --- NEW: Endpoint to update professional details ---
+@app.put("/users/me/professional-details", response_model=UserPublic)
+async def update_professional_details(
+    details: DoctorProfessionalDetails,
+    current_user: Annotated[dict, Depends(require_doctor)]
+):
+    await user_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"professional_details": details.model_dump()}}
+    )
+    updated_user_doc = await user_collection.find_one({"_id": current_user["_id"]})
+    updated_user_doc["_id"] = str(updated_user_doc["_id"])
+    return UserPublic.model_validate(updated_user_doc)
+
+
 # --- AI Prediction Endpoint ---
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     contents = await file.read()
-    img = Image.open(io.BytesIO(contents)).convert("RGB")
-    img_tensor = eval_transforms(img).unsqueeze(0).to(device)
+    img = Image.open(io.BytesIO(contents))
+    img_array = np.array(img)
+    is_grayscale = len(img_array.shape) == 2 or (len(img_array.shape) == 3 and np.all(img_array[:,:,0] == img_array[:,:,1]))
+    if not is_grayscale:
+        raise HTTPException(status_code=400, detail="Incorrect image type. Please upload a grayscale MRI scan.")
+    img_rgb = img.convert("RGB")
+    img_tensor = eval_transforms(img_rgb).unsqueeze(0).to(device)
     with torch.no_grad():
         logits = model(img_tensor)
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
@@ -268,10 +303,8 @@ async def create_assessment(assessment: AssessmentCreate, current_user: Annotate
     assessment_data = assessment.model_dump()
     assessment_data["owner_email"] = current_user["email"]
     assessment_data["created_at"] = datetime.now(timezone.utc)
-    
     new_assessment = await assessment_collection.insert_one(assessment_data)
     created_assessment_doc = await assessment_collection.find_one({"_id": new_assessment.inserted_id})
-    
     created_assessment_doc["_id"] = str(created_assessment_doc["_id"])
     return AssessmentPublic.model_validate(created_assessment_doc)
 
@@ -286,7 +319,6 @@ async def get_my_assessments(
         query_email = patient_email
     else:
         query_email = current_user["email"]
-
     assessments = []
     cursor = assessment_collection.find({"owner_email": query_email}).sort("created_at", -1)
     async for doc in cursor:
@@ -300,10 +332,8 @@ async def create_cognitive_test_result(result: CognitiveTestResultCreate, curren
     result_data = result.model_dump()
     result_data["owner_email"] = current_user["email"]
     result_data["created_at"] = datetime.now(timezone.utc)
-
     new_result = await cognitive_test_collection.insert_one(result_data)
     created_result_doc = await cognitive_test_collection.find_one({"_id": new_result.inserted_id})
-
     created_result_doc["_id"] = str(created_result_doc["_id"])
     return CognitiveTestResultPublic.model_validate(created_result_doc)
 
@@ -318,7 +348,6 @@ async def get_my_cognitive_tests(
         query_email = patient_email
     else:
         query_email = current_user["email"]
-    
     tests = []
     cursor = cognitive_test_collection.find({"owner_email": query_email}).sort("created_at", -1)
     async for doc in cursor:
@@ -362,19 +391,17 @@ async def assign_patient(
     updated_doctor["_id"] = str(updated_doctor["_id"])
     return UserPublic.model_validate(updated_doctor)
 
-@app.get("/assessments/high-risk", response_model=List[HighRiskAssessmentPublic]) # <-- USE NEW MODEL
+@app.get("/assessments/high-risk", response_model=List[HighRiskAssessmentPublic])
 async def get_high_risk_assessments(current_user: Annotated[dict, Depends(require_doctor)]):
     high_risk_assessments = []
     query = {"prediction": {"$in": ["Moderate Impairment", "Mild Impairment"]}}
+    patient_docs = await user_collection.find({}, {"email": 1, "full_name": 1}).to_list(length=None)
+    patient_name_map = {doc["email"]: doc.get("full_name", "N/A") for doc in patient_docs}
     cursor = assessment_collection.find(query).sort("created_at", -1)
     async for doc in cursor:
-        # Find the patient associated with this assessment
-        patient = await user_collection.find_one({"email": doc["owner_email"]})
-        if patient:
-            doc["_id"] = str(doc["_id"])
-            # Add the patient's name to the response
-            doc["patient_full_name"] = patient.get("full_name", "N/A")
-            high_risk_assessments.append(HighRiskAssessmentPublic.model_validate(doc))
+        doc["_id"] = str(doc["_id"])
+        doc["patient_full_name"] = patient_name_map.get(doc["owner_email"], "N/A")
+        high_risk_assessments.append(HighRiskAssessmentPublic.model_validate(doc))
     return high_risk_assessments
 
 @app.get("/doctors/all", response_model=List[UserPublic])
@@ -393,12 +420,10 @@ async def assign_doctor_to_patient(
 ):
     if current_user.get("role") != "patient":
         raise HTTPException(status_code=403, detail="Only patients can assign a doctor.")
-    
     doctor_email = request.doctor_email
     doctor = await user_collection.find_one({"email": doctor_email, "role": "doctor"})
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found.")
-
     await user_collection.update_one(
         {"_id": doctor["_id"]},
         {"$addToSet": {"assigned_patients": current_user["email"]}}

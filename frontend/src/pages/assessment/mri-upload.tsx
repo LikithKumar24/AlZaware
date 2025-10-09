@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UploadCloud, Loader2, BrainCircuit } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function MriUploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -89,7 +90,11 @@ export default function MriUploadPage() {
       });
       setConfirmation('Assessment saved successfully!');
     } catch (err) {
-      setError('An error occurred during analysis or saving the assessment. Please try again.');
+      if (axios.isAxiosError(err) && err.response && err.response.status === 400) {
+        setError(err.response.data.detail);
+      } else {
+        setError('An unexpected error occurred. Please check your connection and try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -135,9 +140,11 @@ export default function MriUploadPage() {
           )}
 
           {error && (
-            <div className="mt-6 p-4 bg-red-50 rounded-lg text-center">
-                <p className="text-red-600">{error}</p>
-            </div>
+            <Alert variant="destructive" className="mt-6">
+              <AlertDescription>
+                {error}
+              </AlertDescription>
+            </Alert>
           )}
 
           {confirmation && (
