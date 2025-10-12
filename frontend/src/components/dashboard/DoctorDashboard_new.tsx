@@ -305,7 +305,7 @@ export default function DoctorDashboard() {
                           <Users className="h-16 w-16 text-slate-300 mx-auto mb-4" />
                           <h3 className="text-lg font-semibold text-slate-600 mb-2">No patients assigned</h3>
                           <p className="text-slate-500 mb-6">Start by assigning patients from the "Patients" tab</p>
-                          <Button onClick={() => setActiveTab('all-patients')} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300">
+                          <Button onClick={() => setActiveTab('all-patients')} className="bg-blue-600 hover:bg-blue-700">
                             View All Patients
                           </Button>
                         </div>
@@ -374,11 +374,8 @@ export default function DoctorDashboard() {
                                 </div>
 
                                 <Link href={`/patient/${patient.email}`} className="mt-4 block">
-                                  <Button 
-                                    size="sm" 
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300"
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" />
+                                  <Button variant="outline" size="sm" className="w-full">
+                                    <Eye className="h-3 w-3 mr-2" />
                                     View Details
                                   </Button>
                                 </Link>
@@ -418,7 +415,7 @@ export default function DoctorDashboard() {
                                     </div>
                                   </div>
                                   <Link href={`/patient/${riskCase.owner_email}`}>
-                                    <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white ml-2 shadow-md hover:shadow-lg transition-all duration-300">
+                                    <Button size="sm" className="bg-red-600 hover:bg-red-700 ml-2">
                                       Review
                                     </Button>
                                   </Link>
@@ -467,8 +464,9 @@ export default function DoctorDashboard() {
                                   </div>
                                 </div>
                                 <Button 
+                                  variant="outline" 
                                   onClick={() => handleAssignPatient(patient.email)}
-                                  className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300"
+                                  className="w-full hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all duration-300"
                                 >
                                   <Users className="h-4 w-4 mr-2" />
                                   Assign to Me
@@ -516,9 +514,9 @@ export default function DoctorDashboard() {
                                     </div>
                                   </div>
                                   <Link href={`/patient/${riskCase.owner_email}`}>
-                                    <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-lg transition-all duration-300">
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      Review Case
+                                    <Button size="sm" className="bg-red-600 hover:bg-red-700">
+                                      <Eye className="h-3 w-3 mr-1" />
+                                      Review
                                     </Button>
                                   </Link>
                                 </div>

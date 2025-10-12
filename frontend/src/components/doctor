@@ -1,0 +1,134 @@
+// src/components/doctor/DoctorProfileHeader.tsx
+import { useState } from 'react';
+import { Camera, Star, Edit } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+
+interface DoctorProfileHeaderProps {
+  user: any;
+  onEditClick: () => void;
+  onPhotoUpload: (file: File) => void;
+}
+
+export default function DoctorProfileHeader({ user, onEditClick, onPhotoUpload }: DoctorProfileHeaderProps) {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setIsUploading(true);
+      try {
+        await onPhotoUpload(file);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  return (
+    <Card className="bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200 shadow-lg">
+      <CardContent className="p-6">
+        <div className="flex flex-col lg:flex-row items-center lg:items-start gap-6">
+          {/* Profile Photo */}
+          <div className="relative">
+            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-lg">
+              {user.profile_photo_url ? (
+                <img
+                  src={`${user.profile_photo_url}?t=${Date.now()}`}
+                  alt={user.full_name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 h-full flex items-center justify-center text-white font-bold text-4xl">
+                  {user.full_name.split(' ').map(n => n[0]).join('')}
+                </div>
+              )}
+            </div>
+            
+            {/* Camera Upload Button */}
+            <label htmlFor="photo-upload" className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full cursor-pointer shadow-lg transition-colors duration-200">
+              <Camera className="h-4 w-4" />
+              <input
+                id="photo-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+                disabled={isUploading}
+              />
+            </label>
+          </div>
+
+          {/* Doctor Info */}
+          <div className="flex-1 text-center lg:text-left">
+            <div className="mb-4">
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                Dr. {user.full_name}
+              </h1>
+              <p className="text-blue-700 font-medium text-lg capitalize mb-2">
+                {user.role} • Alzheimer's specialist(Neurologist)
+              </p>
+              <p className="text-slate-600">
+                {user.professional_details?.professional_experience || 
+                 "Specialist in Cognitive Disorders and Alzheimer's Disease"}
+              </p>
+            </div>
+
+            {/* Rating and Stats */}
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 mb-6">
+              <div className="flex items-center justify-center lg:justify-start gap-2">
+                <div className="flex items-center gap-1 text-yellow-500">
+                  <Star className="w-5 h-5 fill-current" />
+                  <Star className="w-5 h-5 fill-current" />
+                  <Star className="w-5 h-5 fill-current" />
+                  <Star className="w-5 h-5 fill-current" />
+                  <Star className="w-5 h-5 fill-current" />
+                </div>
+                <span className="text-slate-700 font-medium">4.9</span>
+                <span className="text-slate-500 text-sm">(127 reviews)</span>
+              </div>
+              
+              <div className="hidden lg:block w-px h-6 bg-slate-300"></div>
+              
+              <div className="flex items-center justify-center lg:justify-start gap-6 text-sm">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{user.assigned_patients?.length || 0}</div>
+                  <div className="text-slate-600">Patients</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">285</div>
+                  <div className="text-slate-600">CME Points</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">12</div>
+                  <div className="text-slate-600">Certificates</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Info */}
+            <div className="flex flex-col lg:flex-row gap-4 text-sm text-slate-600 mb-6">
+              <div className="flex items-center justify-center lg:justify-start gap-2">
+                <span>📧</span>
+                <span>{user.email}</span>
+              </div>
+              <div className="flex items-center justify-center lg:justify-start gap-2">
+                <span>🏥</span>
+                <span>University Hospital Medical Center</span>
+              </div>
+            </div>
+
+            {/* Edit Profile Button */}
+            <Button 
+              onClick={onEditClick}
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Profile
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

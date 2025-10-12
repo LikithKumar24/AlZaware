@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import shutil
 import certifi
 import numpy as np
+import cv2 # <-- ADDED THIS IMPORT
 
 import torch
 import torch.nn as nn
@@ -43,7 +44,6 @@ cognitive_test_collection = db.get_collection("cognitive_tests")
 # 2. Pydantic Schemas
 # -------------------
 
-# --- NEW: Schemas for Doctor's Professional Details ---
 class ProfessionalDetailItem(BaseModel):
     title: str
     description: str
@@ -70,7 +70,7 @@ class UserPublic(BaseModel):
     role: str
     profile_photo_url: Optional[str] = None
     assigned_patients: Optional[List[str]] = None
-    professional_details: Optional[DoctorProfessionalDetails] = None # <-- NEW
+    professional_details: Optional[DoctorProfessionalDetails] = None
 
 class AssessmentCreate(BaseModel):
     prediction: str
@@ -109,6 +109,17 @@ class AssignPatientRequest(BaseModel):
 
 class AssignDoctorRequest(BaseModel):
     doctor_email: EmailStr
+
+# --- Schemas for the Doctor Dashboard ---
+class PatientSummary(UserPublic):
+    last_mri_result: Optional[AssessmentPublic] = None
+    last_cognitive_score: Optional[CognitiveTestResultPublic] = None
+
+class DoctorDashboardData(BaseModel):
+    total_patients: int
+    high_risk_cases_count: int
+    my_patients_summary: List[PatientSummary]
+    high_risk_patients: List[HighRiskAssessmentPublic]
 
 # -------------------
 # 3. Authentication Setup
@@ -174,6 +185,7 @@ model.load_state_dict(ckpt["model_state"])
 model = model.to(device)
 model.eval()
 eval_transforms = transforms.Compose([transforms.Resize(256), transforms.CenterCrop(224), transforms.ToTensor(), transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+
 print("[INFO] Model loaded and ready.")
 print("[INFO] Connected to MongoDB Atlas.")
 
@@ -191,10 +203,8 @@ async def create_user(user: UserCreate):
     db_user = await user_collection.find_one({"email": user.email})
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
     if user.role not in ["patient", "doctor"]:
         raise HTTPException(status_code=400, detail="Role must be 'patient' or 'doctor'")
-
     hashed_password = security.hash_password(user.password)
     user_data = {
         "email": user.email, "hashed_password": hashed_password,
@@ -204,8 +214,7 @@ async def create_user(user: UserCreate):
     }
     if user.role == "doctor":
         user_data["assigned_patients"] = []
-        user_data["professional_details"] = DoctorProfessionalDetails().model_dump() # <-- NEW
-
+        user_data["professional_details"] = DoctorProfessionalDetails().model_dump()
     new_user = await user_collection.insert_one(user_data)
     created_user_doc = await user_collection.find_one({"_id": new_user.inserted_id})
     created_user_doc["_id"] = str(created_user_doc["_id"])
@@ -220,13 +229,10 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
     if "role" not in user_doc:
         user_doc["role"] = "patient"
-    
     user_doc["_id"] = str(user_doc["_id"])
     user_public = UserPublic.model_validate(user_doc)
-
     access_token = security.create_access_token(data={"sub": user_public.email})
     return {
         "access_token": access_token, 
@@ -244,22 +250,17 @@ async def upload_profile_photo(current_user: Annotated[dict, Depends(get_current
     file_extension = os.path.splitext(file.filename)[1]
     unique_filename = f"{current_user['_id']}{file_extension}"
     file_path = os.path.join("uploads", unique_filename)
-
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-
     photo_url = f"http://127.0.0.1:8000/uploads/{unique_filename}"
-    
     await user_collection.update_one(
         {"_id": current_user["_id"]},
         {"$set": {"profile_photo_url": photo_url}}
     )
-
     updated_user_doc = await user_collection.find_one({"_id": current_user["_id"]})
     updated_user_doc["_id"] = str(updated_user_doc["_id"])
     return UserPublic.model_validate(updated_user_doc)
 
-# --- NEW: Endpoint to update professional details ---
 @app.put("/users/me/professional-details", response_model=UserPublic)
 async def update_professional_details(
     details: DoctorProfessionalDetails,
@@ -274,15 +275,62 @@ async def update_professional_details(
     return UserPublic.model_validate(updated_user_doc)
 
 
-# --- AI Prediction Endpoint ---
+# --- HELPER FUNCTION FOR IMAGE VALIDATION (NEW) ---
+def is_brain_mri_shape(img_bytes: bytes, aspect_ratio_min=0.75, aspect_ratio_max=1.3) -> bool:
+    """
+    Checks if the main object in an image has an aspect ratio typical of a brain MRI.
+    Returns True if the shape is plausible, False otherwise.
+    """
+    try:
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+        
+        # Threshold to create a binary mask and find contours
+        _, thresh = cv2.threshold(img, 30, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if not contours:
+            return False # No object found
+
+        # Find the largest contour (the brain/skull) and its bounding box
+        largest_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(largest_contour)
+
+        if h == 0 or w == 0:
+            return False
+
+        # Calculate the aspect ratio (width / height)
+        aspect_ratio = w / h
+        
+        # Check if the ratio is within the expected range for a brain scan
+        return aspect_ratio_min < aspect_ratio < aspect_ratio_max
+    except Exception:
+        # If any error occurs during processing, assume it's not a valid image
+        return False
+
+
+# --- AI Prediction Endpoint (UPDATED) ---
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     contents = await file.read()
+
+    # --- Step 1: Validate the shape of the image FIRST ---
+    if not is_brain_mri_shape(contents):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image shape. Please upload a proper brain MRI scan."
+        )
+
+    # --- Step 2: If shape is valid, proceed with prediction ---
     img = Image.open(io.BytesIO(contents))
+    
+    # Check for grayscale (this is still a good check to keep)
     img_array = np.array(img)
     is_grayscale = len(img_array.shape) == 2 or (len(img_array.shape) == 3 and np.all(img_array[:,:,0] == img_array[:,:,1]))
     if not is_grayscale:
         raise HTTPException(status_code=400, detail="Incorrect image type. Please upload a grayscale MRI scan.")
+
+    # Convert to RGB and run through the Alzheimer's model
     img_rgb = img.convert("RGB")
     img_tensor = eval_transforms(img_rgb).unsqueeze(0).to(device)
     with torch.no_grad():
@@ -291,11 +339,13 @@ async def predict(file: UploadFile = File(...)):
         pred_idx = int(probs.argmax())
         pred_class = class_names[pred_idx]
         confidence = float(probs[pred_idx])
+
     return {
         "prediction": pred_class,
         "confidence": confidence,
         "class_probabilities": {class_names[i]: f"{float(probs[i]):.2%}" for i in range(len(probs))}
     }
+
 
 # --- Assessment Endpoints ---
 @app.post("/assessments/", response_model=AssessmentPublic)
@@ -430,3 +480,65 @@ async def assign_doctor_to_patient(
     )
     current_user["_id"] = str(current_user["_id"])
     return UserPublic.model_validate(current_user)
+
+# --- Doctor Dashboard Summary Endpoint ---
+@app.get("/doctor/dashboard-summary", response_model=DoctorDashboardData)
+async def get_doctor_dashboard_summary(current_user: Annotated[dict, Depends(require_doctor)]):
+    patient_emails = current_user.get("assigned_patients", [])
+    
+    # 1. Get total patients
+    total_patients = len(patient_emails)
+
+    # 2. Get high-risk cases count
+    high_risk_query = {
+        "owner_email": {"$in": patient_emails},
+        "prediction": {"$in": ["Moderate Impairment", "Mild Impairment"]}
+    }
+    high_risk_count = await assessment_collection.count_documents(high_risk_query)
+
+    # 3. Get summary for each patient
+    my_patients_summary = []
+    if patient_emails:
+        patients_cursor = user_collection.find({"email": {"$in": patient_emails}})
+        async for patient_doc in patients_cursor:
+            patient_doc["_id"] = str(patient_doc["_id"])
+
+            # Find last MRI result
+            last_mri = await assessment_collection.find_one(
+                {"owner_email": patient_doc["email"]}, sort=[("created_at", -1)]
+            )
+            if last_mri:
+                last_mri["_id"] = str(last_mri["_id"])
+
+            # Find last cognitive test
+            last_cognitive = await cognitive_test_collection.find_one(
+                {"owner_email": patient_doc["email"]}, sort=[("created_at", -1)]
+            )
+            if last_cognitive:
+                last_cognitive["_id"] = str(last_cognitive["_id"])
+            
+            patient_summary = PatientSummary(
+                **patient_doc,
+                last_mri_result=last_mri,
+                last_cognitive_score=last_cognitive
+            )
+            my_patients_summary.append(patient_summary)
+
+    # 4. Get high-risk patients details
+    high_risk_patients = []
+    if patient_emails:
+        patient_docs = await user_collection.find({"email": {"$in": patient_emails}}, {"email": 1, "full_name": 1}).to_list(length=None)
+        patient_name_map = {doc["email"]: doc.get("full_name", "N/A") for doc in patient_docs}
+
+        high_risk_cursor = assessment_collection.find(high_risk_query).sort("created_at", -1).limit(5)
+        async for doc in high_risk_cursor:
+            doc["_id"] = str(doc["_id"])
+            doc["patient_full_name"] = patient_name_map.get(doc["owner_email"], "N/A")
+            high_risk_patients.append(HighRiskAssessmentPublic.model_validate(doc))
+
+    return DoctorDashboardData(
+        total_patients=total_patients,
+        high_risk_cases_count=high_risk_count,
+        my_patients_summary=my_patients_summary,
+        high_risk_patients=high_risk_patients
+    )
