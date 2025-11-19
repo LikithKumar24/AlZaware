@@ -8,18 +8,62 @@ interface MemoryRecallTestProps {
   onComplete: (score: number, maxScore: number) => void;
 }
 
-const WORD_LIST = [
+// ✅ LARGE WORD BANK - 100 diverse words for random selection
+const WORD_BANK = [
   'ELEPHANT', 'PIANO', 'GARDEN', 'MOUNTAIN', 'BUTTERFLY',
-  'OCEAN', 'TELESCOPE', 'LIBRARY', 'RAINBOW', 'COMPASS'
+  'OCEAN', 'TELESCOPE', 'LIBRARY', 'RAINBOW', 'COMPASS',
+  'DIAMOND', 'VOLCANO', 'CATHEDRAL', 'ANCHOR', 'LIGHTHOUSE',
+  'PENGUIN', 'SAXOPHONE', 'MEADOW', 'CANYON', 'DRAGONFLY',
+  'GLACIER', 'MICROSCOPE', 'MUSEUM', 'SUNSET', 'BINOCULARS',
+  'EMERALD', 'AVALANCHE', 'PYRAMID', 'HARBOR', 'FORTRESS',
+  'DOLPHIN', 'VIOLIN', 'ORCHARD', 'SUMMIT', 'FIREFLY',
+  'WATERFALL', 'STETHOSCOPE', 'GALLERY', 'HORIZON', 'SEXTANT',
+  'SAPPHIRE', 'EARTHQUAKE', 'TEMPLE', 'BEACON', 'CASTLE',
+  'LEOPARD', 'TRUMPET', 'PRAIRIE', 'VALLEY', 'HONEYBEE',
+  'RIVER', 'BAROMETER', 'ARCHIVE', 'SUNRISE', 'TELESCOPE',
+  'RUBY', 'TORNADO', 'MONASTERY', 'LIGHTHOUSE', 'CITADEL',
+  'TIGER', 'CLARINET', 'SAVANNA', 'PLATEAU', 'LADYBUG',
+  'DESERT', 'THERMOMETER', 'SANCTUARY', 'TWILIGHT', 'PERISCOPE',
+  'PEARL', 'HURRICANE', 'PAGODA', 'WATCHTOWER', 'BASTION',
+  'CHEETAH', 'FLUTE', 'TUNDRA', 'RIDGE', 'CRICKET',
+  'FOREST', 'CHRONOMETER', 'OBSERVATORY', 'DAWN', 'QUADRANT',
+  'OPAL', 'BLIZZARD', 'SHRINE', 'TURRET', 'RAMPART',
+  'PANTHER', 'OBOE', 'JUNGLE', 'PEAK', 'GRASSHOPPER',
+  'SWAMP', 'ALTIMETER', 'PLANETARIUM', 'DUSK', 'ASTROLABE'
 ];
 
+const WORDS_TO_DISPLAY = 10;
 const DISPLAY_TIME = 10000; // 10 seconds
+
+// ✅ Fisher-Yates Shuffle Algorithm for true randomization
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+// ✅ Get random words from the word bank
+function getRandomWords(count: number): string[] {
+  const shuffled = shuffleArray(WORD_BANK);
+  return shuffled.slice(0, count);
+}
 
 export default function MemoryRecallTest({ onComplete }: MemoryRecallTestProps) {
   const [phase, setPhase] = useState<'instructions' | 'memorize' | 'distraction' | 'recall' | 'results'>('instructions');
-  const [userRecall, setUserRecall] = useState<string[]>(Array(10).fill(''));
+  const [selectedWords, setSelectedWords] = useState<string[]>([]);
+  const [userRecall, setUserRecall] = useState<string[]>(Array(WORDS_TO_DISPLAY).fill(''));
   const [timeLeft, setTimeLeft] = useState(10);
   const [score, setScore] = useState(0);
+
+  // ✅ Generate new random words when component mounts
+  useEffect(() => {
+    const newWords = getRandomWords(WORDS_TO_DISPLAY);
+    setSelectedWords(newWords);
+    console.log('🔀 Memory Test - Generated new random words:', newWords);
+  }, []);
 
   useEffect(() => {
     if (phase === 'memorize' && timeLeft > 0) {
@@ -38,15 +82,27 @@ export default function MemoryRecallTest({ onComplete }: MemoryRecallTestProps) 
 
   const handleSubmit = () => {
     const correctAnswers = userRecall.filter((word, index) => 
-      word.trim().toUpperCase() === WORD_LIST[index]
+      word.trim().toUpperCase() === selectedWords[index]
     ).length;
     setScore(correctAnswers);
     setPhase('results');
   };
 
   const handleComplete = () => {
-    onComplete(score, WORD_LIST.length);
+    onComplete(score, selectedWords.length);
   };
+
+  // Wait for words to be generated
+  if (selectedWords.length === 0) {
+    return (
+      <Card className="w-full">
+        <CardContent className="p-8 text-center">
+          <Brain className="h-12 w-12 text-purple-600 mx-auto mb-4 animate-pulse" />
+          <p className="text-slate-600">Preparing test...</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (phase === 'instructions') {
     return (
@@ -61,7 +117,7 @@ export default function MemoryRecallTest({ onComplete }: MemoryRecallTestProps) 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h3 className="font-semibold text-blue-900 mb-2">Instructions:</h3>
             <ul className="list-disc list-inside space-y-2 text-blue-800">
-              <li>You will see 10 words displayed for 10 seconds</li>
+              <li>You will see {WORDS_TO_DISPLAY} words displayed for 10 seconds</li>
               <li>Try to memorize as many as possible</li>
               <li>After a brief distraction task, you'll recall them</li>
               <li>This tests your short-term memory capacity</li>
@@ -84,7 +140,7 @@ export default function MemoryRecallTest({ onComplete }: MemoryRecallTestProps) 
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 p-6">
-            {WORD_LIST.map((word, index) => (
+            {selectedWords.map((word, index) => (
               <div
                 key={index}
                 className="bg-gradient-to-r from-purple-100 to-blue-100 border-2 border-purple-300 rounded-lg p-6 text-center text-2xl font-bold text-purple-900 animate-pulse"
@@ -155,13 +211,13 @@ export default function MemoryRecallTest({ onComplete }: MemoryRecallTestProps) 
       <CardContent className="space-y-6">
         <div className="text-center">
           <div className="text-5xl font-bold text-purple-600 mb-2">
-            {score} / {WORD_LIST.length}
+            {score} / {selectedWords.length}
           </div>
           <p className="text-slate-600">Words Remembered Correctly</p>
         </div>
         
         <div className="space-y-2">
-          {WORD_LIST.map((word, index) => {
+          {selectedWords.map((word, index) => {
             const isCorrect = userRecall[index].trim().toUpperCase() === word;
             return (
               <div
@@ -188,7 +244,7 @@ export default function MemoryRecallTest({ onComplete }: MemoryRecallTestProps) 
         
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-900">
-            <strong>Memory Score: {((score / WORD_LIST.length) * 100).toFixed(0)}%</strong>
+            <strong>Memory Score: {((score / selectedWords.length) * 100).toFixed(0)}%</strong>
             <br />
             {score >= 8 ? 'Excellent memory performance!' :
              score >= 6 ? 'Good memory performance.' :
