@@ -106,33 +106,76 @@ const EnhancedCognitiveTestPage: NextPage = () => {
 
       const calculateAverage = (results: TestResult[]) => {
         if (results.length === 0) return 0;
-        const sum = results.reduce((acc, r) => acc + (r.score / r.maxScore) * 100, 0);
-        return Math.round(sum / results.length);
+        const sum = results.reduce((acc, r) => {
+          const percentage = (r.score / r.maxScore) * 100;
+          // Ensure no NaN values
+          return acc + (isNaN(percentage) ? 0 : percentage);
+        }, 0);
+        const average = sum / results.length;
+        return isNaN(average) ? 0 : Math.round(average);
       };
 
+      // Calculate all scores with fallback to 0
       const memoryScore = calculateAverage(memoryResults);
       const attentionScore = calculateAverage(attentionResults);
       const speedScore = calculateAverage(speedResults);
       const executiveScore = calculateAverage(executiveResults);
+      
+      // Calculate total score - ensure it's never NaN
       const totalScore = Math.round((memoryScore + attentionScore + speedScore + executiveScore) / 4);
 
-      // Ensure all values are valid integers
-      const payload = {
-        test_type: 'Enhanced Cognitive Assessment',
-        score: Number(totalScore) || 0,
-        total_questions: 100,
-        memory_score: Number(memoryScore) || 0,
-        attention_score: Number(attentionScore) || 0,
-        processing_speed: Number(speedScore) || 0,
-        executive_score: Number(executiveScore) || 0,
+      // ✅ STRICT TYPE CONVERSION - Convert ALL values to integers and ensure no NaN/null/undefined
+      const safeInt = (value: any): number => {
+        const num = Number(value);
+        if (isNaN(num) || !isFinite(num)) return 0;
+        return Math.round(num);
       };
 
-      console.log('✅ Saving Enhanced Cognitive Test results...');
-      console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+      // Build payload with guaranteed integer values
+      const payload = {
+        test_type: 'Enhanced Cognitive Assessment',
+        score: safeInt(totalScore),
+        total_questions: 100,
+        memory_score: safeInt(memoryScore),
+        attention_score: safeInt(attentionScore),
+        processing_speed: safeInt(speedScore),
+        executive_score: safeInt(executiveScore),
+      };
+
+      // ✅ VALIDATION LOG - Show final payload with types
+      console.log('═══════════════════════════════════════════');
+      console.log('✅ PAYLOAD VALIDATION BEFORE SENDING:');
+      console.log('═══════════════════════════════════════════');
+      console.log('📤 Payload structure:', JSON.stringify(payload, null, 2));
+      console.log('📊 Type checks:');
+      console.log('  - test_type:', typeof payload.test_type, '=', payload.test_type);
+      console.log('  - score:', typeof payload.score, '=', payload.score);
+      console.log('  - total_questions:', typeof payload.total_questions, '=', payload.total_questions);
+      console.log('  - memory_score:', typeof payload.memory_score, '=', payload.memory_score);
+      console.log('  - attention_score:', typeof payload.attention_score, '=', payload.attention_score);
+      console.log('  - processing_speed:', typeof payload.processing_speed, '=', payload.processing_speed);
+      console.log('  - executive_score:', typeof payload.executive_score, '=', payload.executive_score);
+      console.log('═══════════════════════════════════════════');
       console.log('📊 Test results count:', testResults.length);
-      console.log('🔑 Context token present:', !!token);
-      console.log('🔑 Fresh token present:', !!freshToken);
-      console.log('🔑 Token value (first 20 chars):', freshToken.substring(0, 20) + '...');
+      console.log('🔑 Token present:', !!freshToken);
+      console.log('═══════════════════════════════════════════');
+
+      // ✅ FINAL VALIDATION - Ensure no field is null/undefined/NaN
+      const allFieldsValid = 
+        typeof payload.score === 'number' && !isNaN(payload.score) &&
+        typeof payload.total_questions === 'number' && !isNaN(payload.total_questions) &&
+        typeof payload.memory_score === 'number' && !isNaN(payload.memory_score) &&
+        typeof payload.attention_score === 'number' && !isNaN(payload.attention_score) &&
+        typeof payload.processing_speed === 'number' && !isNaN(payload.processing_speed) &&
+        typeof payload.executive_score === 'number' && !isNaN(payload.executive_score);
+
+      if (!allFieldsValid) {
+        console.error('❌ VALIDATION FAILED - Invalid field types detected!');
+        alert('Error: Invalid data format. Please try again.');
+        return;
+      }
+
+      console.log('✅ All fields validated successfully!');
 
       // Save to backend using fresh token from localStorage
       const response = await axios.post(
@@ -164,6 +207,7 @@ const EnhancedCognitiveTestPage: NextPage = () => {
         errorMessage = 'Session expired. Please log in again.';
         router.push('/login');
       } else if (error.response?.status === 422) {
+        console.error('🔴 422 VALIDATION ERROR:', error.response?.data);
         errorMessage = `Validation error: ${JSON.stringify(error.response?.data?.detail || error.response?.data)}`;
       } else if (error.response?.data?.detail) {
         if (typeof error.response.data.detail === 'string') {
