@@ -5,7 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, AlertTriangle, Brain, Activity, ChevronRight, Clock, Award, Eye } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Users, AlertTriangle, Brain, Activity, ChevronRight, Clock, Award, Eye, AlertCircle, MessageCircle } from 'lucide-react';
 
 interface Patient {
   full_name: string;
@@ -45,87 +46,126 @@ interface HighRiskCase {
 }
 
 export default function DoctorDashboard() {
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const [dashboardData, setDashboardData] = useState<DoctorDashboardData | null>(null);
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [highRiskCases, setHighRiskCases] = useState<HighRiskCase[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAuthError = (status: number, context: string) => {
+    console.error(`[DoctorDashboard] ${status} error in ${context}`);
+    if (status === 401 || status === 403) {
+      setError('Your session has expired or you are not authorized. Please log in again.');
+      setTimeout(() => {
+        logout();
+      }, 2000);
+    }
+  };
 
   const fetchDashboardData = async () => {
-    if (token) {
-      try {
-        const response = await fetch(
-          'http://127.0.0.1:8000/doctor/dashboard-summary',
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setDashboardData(data);
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for dashboard data');
+      return;
+    }
+    
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/doctor/dashboard-summary',
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
-      } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setDashboardData(data);
+        setError(null);
+      } else {
+        handleAuthError(response.status, 'fetchDashboardData');
       }
+    } catch (error) {
+      console.error('[DoctorDashboard] Failed to fetch dashboard data:', error);
+      setError('Failed to load dashboard data. Please try again.');
     }
   };
 
   const fetchAllPatients = async () => {
-    if (token) {
-      try {
-        const response = await fetch('http://127.0.0.1:8000/patients/all', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAllPatients(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch all patients:', error);
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for all patients');
+      return;
+    }
+    
+    try {
+      const response = await fetch('http://127.0.0.1:8000/patients/all', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAllPatients(data);
+        setError(null);
+      } else {
+        handleAuthError(response.status, 'fetchAllPatients');
       }
+    } catch (error) {
+      console.error('[DoctorDashboard] Failed to fetch all patients:', error);
+      setError('Failed to load patients. Please try again.');
     }
   };
 
   const fetchHighRiskCases = async () => {
-    if (token) {
-      try {
-        const response = await fetch(
-          'http://127.0.0.1:8000/assessments/high-risk',
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setHighRiskCases(data);
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for high-risk cases');
+      return;
+    }
+    
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/assessments/high-risk',
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
-      } catch (error) {
-        console.error('Failed to fetch high-risk cases:', error);
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setHighRiskCases(data);
+        setError(null);
+      } else {
+        handleAuthError(response.status, 'fetchHighRiskCases');
       }
+    } catch (error) {
+      console.error('[DoctorDashboard] Failed to fetch high-risk cases:', error);
+      setError('Failed to load high-risk cases. Please try again.');
     }
   };
 
   const handleAssignPatient = async (patientEmail: string) => {
-    if (token) {
-      try {
-        const response = await fetch(
-          'http://127.0.0.1:8000/doctor/assign-patient',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ patient_email: patientEmail }),
-          }
-        );
-        if (response.ok) {
-          setActiveTab('overview');
-          fetchDashboardData();
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for assign patient');
+      return;
+    }
+    
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/doctor/assign-patient',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ patient_email: patientEmail }),
         }
-      } catch (error) {
-        console.error('Failed to assign patient:', error);
+      );
+      if (response.ok) {
+        setActiveTab('overview');
+        fetchDashboardData();
+        setError(null);
+      } else {
+        handleAuthError(response.status, 'handleAssignPatient');
       }
+    } catch (error) {
+      console.error('[DoctorDashboard] Failed to assign patient:', error);
+      setError('Failed to assign patient. Please try again.');
     }
   };
 
@@ -222,6 +262,14 @@ export default function DoctorDashboard() {
 
               {/* Tab Content */}
               <div className="px-6 pb-6">
+                {error && (
+                  <Alert variant="destructive" className="mt-6">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                
                 <TabsContent value="overview" className="mt-6 space-y-6">
                   {/* Statistics Grid */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -373,12 +421,20 @@ export default function DoctorDashboard() {
                                   </div>
                                 </div>
 
-                                <Link href={`/patient/${patient.email}`} className="mt-4 block">
-                                  <Button variant="outline" size="sm" className="w-full">
-                                    <Eye className="h-3 w-3 mr-2" />
-                                    View Details
-                                  </Button>
-                                </Link>
+                                <div className="mt-4 flex gap-2">
+                                  <Link href={`/patient/${patient.email}`} className="flex-1">
+                                    <Button variant="outline" size="sm" className="w-full">
+                                      <Eye className="h-3 w-3 mr-2" />
+                                      View Details
+                                    </Button>
+                                  </Link>
+                                  <Link href={`/chat?email=${patient.email}`} className="flex-1">
+                                    <Button size="sm" className="w-full bg-green-600 hover:bg-green-700 text-white">
+                                      <MessageCircle className="h-3 w-3 mr-2" />
+                                      Chat
+                                    </Button>
+                                  </Link>
+                                </div>
                               </CardContent>
                             </Card>
                           ))}

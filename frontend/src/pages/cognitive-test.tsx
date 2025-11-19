@@ -27,7 +27,7 @@ const CognitiveTestPage: NextPage = () => {
   const router = useRouter();
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [userAnswers, setUserAnswers] = useState({});
+  const [userAnswers, setUserAnswers] = useState<Record<number, any>>({});
   const [finalScore, setFinalScore] = useState(0);
   const [showScore, setShowScore] = useState(false);
   const [isTestComplete, setIsTestComplete] = useState(false);
@@ -38,7 +38,7 @@ const CognitiveTestPage: NextPage = () => {
     }
   }, [user, router]);
 
-  const handleAnswerChange = (questionIndex, answer) => {
+  const handleAnswerChange = (questionIndex: number, answer: any) => {
     setUserAnswers({ ...userAnswers, [questionIndex]: answer });
   };
 
@@ -59,26 +59,30 @@ const CognitiveTestPage: NextPage = () => {
 
       switch (question.type) {
         case 'naming':
-          if (answer.toLowerCase() === question.correctAnswer) score += 1;
+          if (question.correctAnswer && answer.toLowerCase() === question.correctAnswer) score += 1;
           break;
         case 'attention_digits':
-          if (answer === question.correctAnswer) score += 1;
+          if (question.correctAnswer && answer === question.correctAnswer) score += 1;
           break;
         case 'attention_subtraction':
-          const correctSubtractions = question.correctAnswers.filter((val, i) => val === answer[i]).length;
-          score += correctSubtractions;
+          if (question.correctAnswers) {
+            const correctSubtractions = question.correctAnswers.filter((val, i) => val === answer[i]).length;
+            score += correctSubtractions;
+          }
           break;
         case 'memory_recall':
-          const correctRecalls = question.correctAnswers.filter(val => answer.includes(val)).length;
-          score += correctRecalls;
+          if (question.correctAnswers) {
+            const correctRecalls = question.correctAnswers.filter(val => answer.includes(val)).length;
+            score += correctRecalls;
+          }
           break;
         case 'orientation':
           // Simplified scoring
           if (answer.day && answer.month && answer.year) score += 3;
           break;
         case 'sentence_repetition':
-            if (answer.toLowerCase() === question.correctAnswer.toLowerCase()) score += 2;
-            break;
+          if (question.correctAnswer && answer.toLowerCase() === question.correctAnswer.toLowerCase()) score += 2;
+          break;
         default:
           break;
       }

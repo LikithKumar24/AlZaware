@@ -14,6 +14,7 @@ export default function MriUploadPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [prediction, setPrediction] = useState<string | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
+  const [heatmapUrl, setHeatmapUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +28,7 @@ export default function MriUploadPage() {
       setPreview(previewUrl);
       setPrediction(null);
       setConfidence(null);
+      setHeatmapUrl(null);
       setError(null);
       setConfirmation(null);
     }
@@ -42,6 +44,7 @@ export default function MriUploadPage() {
       setPreview(previewUrl);
       setPrediction(null);
       setConfidence(null);
+      setHeatmapUrl(null);
       setError(null);
       setConfirmation(null);
     }
@@ -58,6 +61,7 @@ export default function MriUploadPage() {
     setIsLoading(true);
     setPrediction(null);
     setConfidence(null);
+    setHeatmapUrl(null);
     setError(null);
     setConfirmation(null);
 
@@ -71,9 +75,10 @@ export default function MriUploadPage() {
         },
       });
 
-      const { prediction, confidence } = predictResponse.data;
+      const { prediction, confidence, heatmap_url } = predictResponse.data;
       setPrediction(prediction);
       setConfidence(confidence);
+      setHeatmapUrl(heatmap_url);
 
       if (!token) {
         setError("You must be logged in to save an assessment.");
@@ -157,15 +162,49 @@ export default function MriUploadPage() {
           )}
 
           {prediction && confidence !== null && (
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg text-center">
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">Prediction Result</h3>
-              <div className="flex items-center justify-center space-x-2">
-                <BrainCircuit className="w-6 h-6 text-blue-600" />
-                <p className="text-xl font-bold text-blue-700">{prediction}</p>
+            <div className="mt-6 space-y-4">
+              <div className="p-4 bg-blue-50 rounded-lg text-center">
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">Prediction Result</h3>
+                <div className="flex items-center justify-center space-x-2">
+                  <BrainCircuit className="w-6 h-6 text-blue-600" />
+                  <p className="text-xl font-bold text-blue-700">{prediction}</p>
+                </div>
+                <p className="text-sm text-slate-600 mt-2">
+                  Confidence: <span className="font-semibold">{(confidence * 100).toFixed(2)}%</span>
+                </p>
               </div>
-              <p className="text-sm text-slate-600 mt-2">
-                Confidence: <span className="font-semibold">{(confidence * 100).toFixed(2)}%</span>
-              </p>
+
+              {heatmapUrl && (
+                <div className="p-4 bg-purple-50 rounded-lg">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-3 text-center">
+                    Grad-CAM Visualization
+                  </h3>
+                  <p className="text-sm text-slate-600 mb-3 text-center">
+                    Highlighted regions show areas that contributed most to the model's decision
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700 mb-2 text-center">Original MRI</p>
+                      <img 
+                        src={preview || ''} 
+                        alt="Original MRI" 
+                        className="w-full h-auto rounded-lg shadow-md border-2 border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700 mb-2 text-center">Heatmap Overlay</p>
+                      <img 
+                        src={heatmapUrl} 
+                        alt="Grad-CAM Heatmap" 
+                        className="w-full h-auto rounded-lg shadow-md border-2 border-purple-300"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-3 text-center italic">
+                    Red/Yellow areas indicate regions of high importance for the prediction
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

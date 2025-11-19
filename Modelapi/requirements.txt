@@ -10,3 +10,5 @@ python-jose[cryptography]
 python-multipart
 passlib[bcrypt]
 email-validator
+opencv-python
+numpy

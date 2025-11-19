@@ -1,3 +1,4 @@
+console.log("✅ Active PatientDashboard loaded");
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useRouter } from "next/router";

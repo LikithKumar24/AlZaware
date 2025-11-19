@@ -1,11 +1,13 @@
 // src/components/dashboard/DoctorDashboard.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, AlertTriangle, Brain, Activity, ChevronRight, Clock, Award, Eye } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Users, AlertTriangle, Brain, Activity, Clock, Award, Eye, UserPlus, AlertCircle, MessageCircle } from 'lucide-react';
+import PatientRequests from '@/components/doctor/PatientRequests';
 
 interface Patient {
   full_name: string;
@@ -45,87 +47,192 @@ interface HighRiskCase {
 }
 
 export default function DoctorDashboard() {
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const [dashboardData, setDashboardData] = useState<DoctorDashboardData | null>(null);
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
-  const [highRiskCases, setHighRiskCases] = useState<HighRiskCase[]>([]);
+  const [allHighRiskCases, setAllHighRiskCases] = useState<HighRiskCase[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [error, setError] = useState<string | null>(null);
+  const [assigningPatient, setAssigningPatient] = useState<string | null>(null);
+
+  // Get emails of assigned patients for quick lookup
+  const assignedPatientEmails = useMemo(() => {
+    if (!dashboardData?.my_patients_summary) return new Set<string>();
+    return new Set(dashboardData.my_patients_summary.map(p => p.email));
+  }, [dashboardData]);
+
+  // Filter high-risk cases from assigned patients only (for overview section)
+  const myHighRiskPatients = useMemo(() => {
+    if (!dashboardData?.my_patients_summary) return [];
+    
+    return dashboardData.my_patients_summary
+      .filter(patient => {
+        if (!patient.last_mri_result) return false;
+        
+        const prediction = patient.last_mri_result.prediction;
+        // Include Moderate and Severe Impairment as high-risk
+        return prediction.includes('Moderate') || prediction.includes('Severe');
+      })
+      .map(patient => ({
+        patient_full_name: patient.full_name,
+        prediction: patient.last_mri_result!.prediction,
+        confidence: patient.last_mri_result!.confidence,
+        created_at: patient.last_mri_result!.created_at,
+        owner_email: patient.email
+      }));
+  }, [dashboardData]);
+
+  const handleAuthError = (status: number, context: string) => {
+    console.error(`[DoctorDashboard] ${status} error in ${context}`);
+    if (status === 401 || status === 403) {
+      setError('Your session has expired or you are not authorized. Please log in again.');
+      setTimeout(() => {
+        logout();
+      }, 2000);
+    }
+  };
 
   const fetchDashboardData = async () => {
-    if (token) {
-      try {
-        const response = await fetch(
-          'http://127.0.0.1:8000/doctor/dashboard-summary',
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setDashboardData(data);
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for dashboard data');
+      return;
+    }
+    
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/doctor/dashboard-summary',
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
-      } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setDashboardData(data);
+        setError(null);
+      } else {
+        handleAuthError(response.status, 'fetchDashboardData');
       }
+    } catch (error) {
+      console.error('[DoctorDashboard] Failed to fetch dashboard data:', error);
+      setError('Failed to load dashboard data. Please try again.');
     }
   };
 
   const fetchAllPatients = async () => {
-    if (token) {
-      try {
-        const response = await fetch('http://127.0.0.1:8000/patients/all', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAllPatients(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch all patients:', error);
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for all patients');
+      return;
+    }
+    
+    try {
+      const response = await fetch('http://127.0.0.1:8000/patients/all', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAllPatients(data);
+        setError(null);
+      } else {
+        handleAuthError(response.status, 'fetchAllPatients');
       }
+    } catch (error) {
+      console.error('[DoctorDashboard] Failed to fetch all patients:', error);
+      setError('Failed to load patients. Please try again.');
     }
   };
 
-  const fetchHighRiskCases = async () => {
-    if (token) {
-      try {
-        const response = await fetch(
-          'http://127.0.0.1:8000/assessments/high-risk',
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setHighRiskCases(data);
+  const fetchAllHighRiskCases = async () => {
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for high-risk cases');
+      return;
+    }
+    
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/assessments/high-risk',
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
-      } catch (error) {
-        console.error('Failed to fetch high-risk cases:', error);
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setAllHighRiskCases(data);
+        setError(null);
+      } else {
+        // Silently handle errors - don't show to user
+        console.error('[DoctorDashboard] Failed to fetch high-risk cases:', response.status);
+        setAllHighRiskCases([]);
       }
+    } catch (error) {
+      // Silently handle errors - don't show to user
+      console.error('[DoctorDashboard] Failed to fetch high-risk cases:', error);
+      setAllHighRiskCases([]);
+    }
+  };
+
+  const handleAssignPatientFromHighRisk = async (patientEmail: string) => {
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for assign patient');
+      return;
+    }
+    
+    setAssigningPatient(patientEmail);
+    
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/doctor/assign-patient',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ patient_email: patientEmail }),
+        }
+      );
+      if (response.ok) {
+        // Refresh both dashboard data and high-risk cases
+        await Promise.all([fetchDashboardData(), fetchAllHighRiskCases()]);
+        setError(null);
+      } else {
+        handleAuthError(response.status, 'handleAssignPatientFromHighRisk');
+      }
+    } catch (error) {
+      console.error('[DoctorDashboard] Failed to assign patient:', error);
+      setError('Failed to assign patient. Please try again.');
+    } finally {
+      setAssigningPatient(null);
     }
   };
 
   const handleAssignPatient = async (patientEmail: string) => {
-    if (token) {
-      try {
-        const response = await fetch(
-          'http://127.0.0.1:8000/doctor/assign-patient',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ patient_email: patientEmail }),
-          }
-        );
-        if (response.ok) {
-          setActiveTab('overview');
-          fetchDashboardData();
+    if (!token || token.trim() === '') {
+      console.error('[DoctorDashboard] Invalid token for assign patient');
+      return;
+    }
+    
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/doctor/assign-patient',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ patient_email: patientEmail }),
         }
-      } catch (error) {
-        console.error('Failed to assign patient:', error);
+      );
+      if (response.ok) {
+        setActiveTab('overview');
+        fetchDashboardData();
+        setError(null);
+      } else {
+        handleAuthError(response.status, 'handleAssignPatient');
       }
+    } catch (error) {
+      console.error('[DoctorDashboard] Failed to assign patient:', error);
+      setError('Failed to assign patient. Please try again.');
     }
   };
 
@@ -165,8 +272,8 @@ export default function DoctorDashboard() {
       fetchDashboardData();
     } else if (activeTab === 'all-patients') {
       fetchAllPatients();
-    } else if (activeTab === "high-risk") {
-      fetchHighRiskCases();
+    } else if (activeTab === 'high-risk') {
+      fetchAllHighRiskCases();
     }
   }, [activeTab, token]);
 
@@ -195,13 +302,20 @@ export default function DoctorDashboard() {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               {/* Tab Navigation */}
               <div className="bg-gradient-to-r from-slate-50/80 to-blue-50/80 px-6 pt-6 pb-4">
-                <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 bg-white/90 p-1 rounded-xl shadow-md border border-slate-200/70">
+                <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-4 bg-white/90 p-1 rounded-xl shadow-md border border-slate-200/70">
                   <TabsTrigger
                     value="overview"
                     className="flex items-center justify-center px-3 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md rounded-lg transition-all duration-300 hover:bg-slate-100"
                   >
                     <Activity className="h-4 w-4 mr-1.5" />
                     <span className="hidden sm:inline">Overview</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="requests"
+                    className="flex items-center justify-center px-3 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md rounded-lg transition-all duration-300 hover:bg-slate-100"
+                  >
+                    <UserPlus className="h-4 w-4 mr-1.5" />
+                    <span className="hidden sm:inline">Requests</span>
                   </TabsTrigger>
                   <TabsTrigger
                     value="all-patients"
@@ -222,6 +336,14 @@ export default function DoctorDashboard() {
 
               {/* Tab Content */}
               <div className="px-6 pb-6">
+                {error && (
+                  <Alert variant="destructive" className="mt-6">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                
                 <TabsContent value="overview" className="mt-6 space-y-6">
                   {/* Statistics Grid */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -247,7 +369,7 @@ export default function DoctorDashboard() {
                           <div>
                             <p className="text-xs font-medium text-red-700 uppercase tracking-wide">High-Risk</p>
                             <p className="text-2xl font-bold text-red-900 mt-1">
-                              {dashboardData?.high_risk_cases_count ?? '...'}
+                              {myHighRiskPatients.length}
                             </p>
                           </div>
                           <div className="p-2 bg-red-600 rounded-lg">
@@ -373,15 +495,26 @@ export default function DoctorDashboard() {
                                   </div>
                                 </div>
 
-                                <Link href={`/patient/${patient.email}`} className="mt-4 block">
-                                  <Button 
-                                    size="sm" 
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300"
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    View Details
-                                  </Button>
-                                </Link>
+                                <div className="mt-4 flex gap-2">
+                                  <Link href={`/patient/${patient.email}`} className="flex-1">
+                                    <Button 
+                                      size="sm" 
+                                      className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md transition-all duration-300"
+                                    >
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View Details
+                                    </Button>
+                                  </Link>
+                                  <Link href={`/chat?email=${patient.email}`} className="flex-1">
+                                    <Button 
+                                      size="sm" 
+                                      className="w-full bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md transition-all duration-300"
+                                    >
+                                      <MessageCircle className="h-4 w-4 mr-2" />
+                                      Chat
+                                    </Button>
+                                  </Link>
+                                </div>
                               </CardContent>
                             </Card>
                           ))}
@@ -391,18 +524,18 @@ export default function DoctorDashboard() {
                   </Card>
 
                   {/* High-Risk Alerts */}
-                  {dashboardData && dashboardData.high_risk_patients.length > 0 && (
+                  {myHighRiskPatients.length > 0 && (
                     <Card className="border border-red-200 bg-gradient-to-r from-red-50/50 to-orange-50/50">
                       <CardHeader className="pb-4">
                         <CardTitle className="text-xl font-semibold text-red-900 flex items-center">
                           <AlertTriangle className="h-5 w-5 mr-2 text-red-600" />
                           High-Risk Alerts
                         </CardTitle>
-                        <CardDescription className="text-red-700">Patients requiring immediate attention</CardDescription>
+                        <CardDescription className="text-red-700">Your patients requiring immediate attention</CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {dashboardData.high_risk_patients.slice(0, 4).map((riskCase, index) => (
+                          {myHighRiskPatients.slice(0, 4).map((riskCase, index) => (
                             <Card key={`${riskCase.owner_email}-${index}`} className="border border-red-200 bg-white hover:shadow-md transition-all duration-300">
                               <CardContent className="p-4">
                                 <div className="flex items-center justify-between">
@@ -434,6 +567,10 @@ export default function DoctorDashboard() {
                       </CardContent>
                     </Card>
                   )}
+                </TabsContent>
+
+                <TabsContent value="requests" className="mt-6">
+                  <PatientRequests />
                 </TabsContent>
 
                 <TabsContent value="all-patients" className="mt-6">
@@ -492,7 +629,7 @@ export default function DoctorDashboard() {
                       <CardDescription className="text-red-700">All patients with concerning assessment results</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {highRiskCases.length === 0 ? (
+                      {allHighRiskCases.length === 0 ? (
                         <div className="text-center py-12">
                           <AlertTriangle className="h-16 w-16 text-green-300 mx-auto mb-4" />
                           <h3 className="text-lg font-semibold text-green-600 mb-2">No high-risk cases</h3>
@@ -500,40 +637,63 @@ export default function DoctorDashboard() {
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {highRiskCases.map((riskCase, index) => (
-                            <Card key={`${riskCase.owner_email}-${index}`} className="border border-red-200 bg-white hover:shadow-md transition-all duration-300">
-                              <CardContent className="p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                  <div className="flex items-center flex-1 min-w-0">
-                                    <div className="h-10 w-10 bg-red-500 rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">
-                                      {riskCase.patient_full_name.split(' ').map(n => n[0]).join('')}
+                          {allHighRiskCases.map((riskCase, index) => {
+                            const isAssigned = assignedPatientEmails.has(riskCase.owner_email);
+                            const isAssigning = assigningPatient === riskCase.owner_email;
+                            
+                            return (
+                              <Card key={`${riskCase.owner_email}-${index}`} className="border border-red-200 bg-white hover:shadow-md transition-all duration-300">
+                                <CardContent className="p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center flex-1 min-w-0">
+                                      <div className="h-10 w-10 bg-red-500 rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">
+                                        {riskCase.patient_full_name.split(' ').map(n => n[0]).join('')}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        {isAssigned ? (
+                                          <Link href={`/patient/${riskCase.owner_email}`} className="font-semibold text-slate-900 hover:text-red-600 transition-colors block truncate">
+                                            {riskCase.patient_full_name}
+                                          </Link>
+                                        ) : (
+                                          <p className="font-semibold text-slate-900 block truncate">
+                                            {riskCase.patient_full_name}
+                                          </p>
+                                        )}
+                                        <p className="text-xs text-slate-500">{formatDate(riskCase.created_at)}</p>
+                                      </div>
                                     </div>
-                                    <div className="min-w-0 flex-1">
-                                      <Link href={`/patient/${riskCase.owner_email}`} className="font-semibold text-slate-900 hover:text-red-600 transition-colors block truncate">
-                                        {riskCase.patient_full_name}
+                                    {isAssigned ? (
+                                      <Link href={`/patient/${riskCase.owner_email}`}>
+                                        <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-lg transition-all duration-300">
+                                          <Eye className="h-4 w-4 mr-2" />
+                                          Review Case
+                                        </Button>
                                       </Link>
-                                      <p className="text-xs text-slate-500">{formatDate(riskCase.created_at)}</p>
+                                    ) : (
+                                      <Button 
+                                        size="sm" 
+                                        onClick={() => handleAssignPatientFromHighRisk(riskCase.owner_email)}
+                                        disabled={isAssigning}
+                                        className="bg-amber-600 hover:bg-amber-700 text-white shadow-md hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+                                      >
+                                        <UserPlus className="h-4 w-4 mr-2" />
+                                        {isAssigning ? 'Assigning...' : 'Assign to View'}
+                                      </Button>
+                                    )}
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium ${getRiskLevelColor(riskCase.prediction)}`}>
+                                      {getRiskIcon(riskCase.prediction)}
+                                      <span className="ml-2">{riskCase.prediction}</span>
                                     </div>
+                                    <p className="text-sm text-slate-600">
+                                      {(riskCase.confidence * 100).toFixed(1)}% confidence level
+                                    </p>
                                   </div>
-                                  <Link href={`/patient/${riskCase.owner_email}`}>
-                                    <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-lg transition-all duration-300">
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      Review Case
-                                    </Button>
-                                  </Link>
-                                </div>
-                                <div className="space-y-2">
-                                  <div className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium ${getRiskLevelColor(riskCase.prediction)}`}>
-                                    {getRiskIcon(riskCase.prediction)}
-                                    <span className="ml-2">{riskCase.prediction}</span>
-                                  </div>
-                                  <p className="text-sm text-slate-600">
-                                    {(riskCase.confidence * 100).toFixed(1)}% confidence level
-                                  </p>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
                         </div>
                       )}
                     </CardContent>

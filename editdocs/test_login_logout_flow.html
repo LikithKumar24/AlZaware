@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login/Logout Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        input {
+            padding: 8px;
+            margin: 5px 0;
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>AlzAware Login/Logout Test</h1>
+    
+    <div class="section">
+        <h2>1. Login</h2>
+        <div>
+            <input type="email" id="email" placeholder="Email" value="test@example.com">
+            <input type="password" id="password" placeholder="Password" value="password123">
+            <button onclick="testLogin()">Login</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>2. Check Auth State</h2>
+        <button onclick="checkAuthState()">Check Current Auth State</button>
+    </div>
+
+    <div class="section">
+        <h2>3. Logout</h2>
+        <button onclick="testLogout()">Logout (Clear State)</button>
+    </div>
+
+    <div class="section">
+        <h2>4. Try Login Again</h2>
+        <button onclick="testLogin()">Login Again</button>
+    </div>
+
+    <div class="section">
+        <h2>Log Output</h2>
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:8000';
+        
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            const timestamp = new Date().toLocaleTimeString();
+            output.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            console.log(message);
+        }
+
+        function logObject(label, obj) {
+            const output = document.getElementById('output');
+            output.innerHTML += `<div class="info"><strong>${label}:</strong></div><pre>${JSON.stringify(obj, null, 2)}</pre>`;
+            console.log(label, obj);
+        }
+
+        async function testLogin() {
+            try {
+                log('=== STARTING LOGIN ===', 'info');
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                log(`Attempting login with email: ${email}`);
+                
+                // Clear any existing auth state
+                log('Clearing localStorage...');
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                
+                // Prepare form data
+                const params = new URLSearchParams();
+                params.append('username', email);
+                params.append('password', password);
+                
+                log('Sending POST request to /token endpoint...');
+                
+                const response = await fetch(`${API_URL}/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: params
+                });
+                
+                log(`Response status: ${response.status}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    log(`Login failed: ${errorData.detail || 'Unknown error'}`, 'error');
+                    logObject('Error Response', errorData);
+                    return;
+                }
+                
+                const data = await response.json();
+                log('Login successful!', 'success');
+                logObject('Response Data', data);
+                
+                // Store in localStorage
+                if (data.access_token && data.user) {
+                    localStorage.setItem('token', data.access_token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    log('Token and user stored in localStorage', 'success');
+                } else {
+                    log('Warning: Missing access_token or user in response', 'error');
+                }
+                
+                checkAuthState();
+                
+            } catch (error) {
+                log(`Login error: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+
+        function testLogout() {
+            log('=== STARTING LOGOUT ===', 'info');
+            
+            log('Clearing localStorage...');
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            
+            log('Logout complete', 'success');
+            checkAuthState();
+        }
+
+        function checkAuthState() {
+            log('=== CHECKING AUTH STATE ===', 'info');
+            
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+            
+            if (token) {
+                log(`Token exists: ${token.substring(0, 20)}...`, 'success');
+            } else {
+                log('No token in localStorage', 'error');
+            }
+            
+            if (user) {
+                log('User data exists in localStorage', 'success');
+                logObject('User Data', JSON.parse(user));
+            } else {
+                log('No user data in localStorage', 'error');
+            }
+        }
+
+        // Initial state check
+        window.onload = function() {
+            log('Page loaded - checking initial state', 'info');
+            checkAuthState();
+        };
+    </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 // src/pages/patient/profile.tsx
+console.log("✅ Active PatientDashboard loaded");
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useRouter } from "next/router";
@@ -19,7 +20,8 @@ import {
   Award,
   ChevronRight,
   Eye,
-  Download
+  Download,
+  MessageCircle
 } from "lucide-react";
 
 interface Assessment {
@@ -86,6 +88,7 @@ export default function PatientProfilePage() {
           doctor.assigned_patients?.includes(user?.email)
         );
         setAssignedDoctors(assigned);
+        console.log("[ChatBanner] Assigned doctors:", assigned);
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -149,6 +152,18 @@ export default function PatientProfilePage() {
 
   const calculateCognitivePercentage = (score: number, total: number) => {
     return Math.round((score / total) * 100);
+  };
+
+  const handleChatClick = () => {
+    if (assignedDoctors.length > 0) {
+      const doctorEmail = assignedDoctors[0].email;
+      console.log("[ChatBanner] Opening chat with doctor:", doctorEmail);
+      router.push(`/chat?email=${doctorEmail}`);
+    }
+  };
+
+  const getDoctorDisplayName = (doctor: any) => {
+    return doctor.full_name || doctor.email.split('@')[0];
   };
 
   if (!user) return null;
@@ -432,6 +447,47 @@ export default function PatientProfilePage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Chat with Doctor Section */}
+            {assignedDoctors.length > 0 ? (
+              <Card className="shadow-lg border-0 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-green-600 p-3 rounded-full">
+                        <MessageCircle className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-green-900 text-lg">💬 Message Your Doctor</h3>
+                        <p className="text-sm text-green-700">
+                          Dr. {getDoctorDisplayName(assignedDoctors[0])} • Real-time chat available
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleChatClick}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md shadow-md hover:shadow-lg transition-all"
+                    >
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Open Chat
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="shadow-lg border-0 bg-gray-50">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <MessageCircle className="h-6 w-6 text-gray-400" />
+                    <div>
+                      <p className="text-gray-600 text-sm">
+                        No doctor assigned yet. Visit 'View Doctors' to request supervision.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Upcoming Appointments */}
             <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
