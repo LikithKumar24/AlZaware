@@ -18,11 +18,21 @@ interface CognitiveSummaryProps {
 }
 
 export default function CognitiveSummary({ results, onSaveAndContinue, isSaving = false }: CognitiveSummaryProps) {
+  // Helper function to safely calculate percentage
+  const safePercent = (value: number, max: number): number => {
+    const numValue = Number(value) || 0;
+    const numMax = Number(max) || 0;
+    if (numMax === 0 || !numMax || !numValue) return 0;
+    return Math.round((numValue / numMax) * 100);
+  };
+
   const calculateOverallScore = () => {
+    if (!results || results.length === 0) return 0;
     const totalPercentage = results.reduce((sum, result) => {
-      return sum + (result.score / result.maxScore) * 100;
+      return sum + safePercent(result.score, result.maxScore);
     }, 0);
-    return (totalPercentage / results.length).toFixed(1);
+    const average = totalPercentage / results.length;
+    return (isNaN(average) || !isFinite(average) ? 0 : average).toFixed(1);
   };
 
   const getCategoryScore = (category: string) => {
@@ -30,9 +40,10 @@ export default function CognitiveSummary({ results, onSaveAndContinue, isSaving 
     if (categoryResults.length === 0) return 0;
     
     const totalPercentage = categoryResults.reduce((sum, result) => {
-      return sum + (result.score / result.maxScore) * 100;
+      return sum + safePercent(result.score, result.maxScore);
     }, 0);
-    return (totalPercentage / categoryResults.length).toFixed(0);
+    const average = totalPercentage / categoryResults.length;
+    return (isNaN(average) || !isFinite(average) ? 0 : average).toFixed(0);
   };
 
   const getPerformanceLevel = (score: number) => {
@@ -119,7 +130,7 @@ export default function CognitiveSummary({ results, onSaveAndContinue, isSaving 
             <h3 className="text-xl font-semibold text-slate-800 mb-4">Individual Test Results</h3>
             <div className="space-y-3">
               {results.map((result, index) => {
-                const percentage = (result.score / result.maxScore) * 100;
+                const percentage = safePercent(result.score, result.maxScore);
                 const testPerf = getPerformanceLevel(percentage);
                 
                 return (

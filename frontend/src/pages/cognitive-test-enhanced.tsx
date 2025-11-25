@@ -104,15 +104,22 @@ const EnhancedCognitiveTestPage: NextPage = () => {
       const speedResults = testResults.filter(r => r.category === 'speed');
       const executiveResults = testResults.filter(r => r.category === 'executive');
 
+      // Helper function to safely calculate percentage
+      const safePercent = (value: number, max: number): number => {
+        const numValue = Number(value) || 0;
+        const numMax = Number(max) || 0;
+        if (numMax === 0 || !numMax || !numValue) return 0;
+        return Math.round((numValue / numMax) * 100);
+      };
+
       const calculateAverage = (results: TestResult[]) => {
         if (results.length === 0) return 0;
         const sum = results.reduce((acc, r) => {
-          const percentage = (r.score / r.maxScore) * 100;
-          // Ensure no NaN values
-          return acc + (isNaN(percentage) ? 0 : percentage);
+          const percentage = safePercent(r.score, r.maxScore);
+          return acc + percentage;
         }, 0);
         const average = sum / results.length;
-        return isNaN(average) ? 0 : Math.round(average);
+        return isNaN(average) || !isFinite(average) ? 0 : Math.round(average);
       };
 
       // Calculate all scores with fallback to 0

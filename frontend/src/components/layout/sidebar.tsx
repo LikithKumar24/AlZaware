@@ -11,7 +11,7 @@ export function Sidebar() {
   return (
     <aside className="hidden md:block w-64 min-h-[calc(100vh-4rem)] bg-white/30 backdrop-blur-sm p-6">
       <Link href="/profile">
-        <div className="w-32 h-32 bg-blue-200 rounded-full flex items-center justify-center mx-auto cursor-pointer overflow-hidden">
+        <div className="w-32 h-32 rounded-full flex items-center justify-center mx-auto cursor-pointer overflow-hidden shadow-lg ring-4 ring-white bg-white transition-transform hover:scale-105 duration-200">
           {user && user.profile_photo_url ? (
             <img
               src={user.profile_photo_url}
@@ -19,7 +19,11 @@ export function Sidebar() {
               className="w-full h-full object-cover"
             />
           ) : (
-            <span className="text-blue-700 font-medium">Profile</span>
+            <div className="w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+              <span className="text-4xl font-bold text-white">
+                {user?.full_name ? user.full_name.charAt(0).toUpperCase() : 'U'}
+              </span>
+            </div>
           )}
         </div>
       </Link>
@@ -30,7 +34,7 @@ export function Sidebar() {
           <p className="text-xs text-slate-400 mt-1 capitalize">{user.role}</p>
         </div>
       )}
-      
+
       {user?.role === 'patient' && (
         <div className="mt-8 space-y-3">
           <Link href="/view-doctors" className="block">

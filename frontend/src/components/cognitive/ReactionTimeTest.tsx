@@ -7,9 +7,30 @@ interface ReactionTimeTestProps {
   onComplete: (avgTime: number, score: number) => void;
 }
 
+interface Position {
+  top: string;
+  left: string;
+}
+
 const COLORS = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500'];
 const SHAPES = ['circle', 'square', 'triangle'];
 const NUM_TRIALS = 12;
+
+// ✅ Generate random position within safe boundaries
+const getRandomPosition = (): Position => {
+  // Use percentages for responsive positioning
+  // Keep shape within 20-80% of container to avoid edges
+  const minPercent = 20;
+  const maxPercent = 80;
+  
+  const randomTop = Math.random() * (maxPercent - minPercent) + minPercent;
+  const randomLeft = Math.random() * (maxPercent - minPercent) + minPercent;
+  
+  return {
+    top: `${randomTop}%`,
+    left: `${randomLeft}%`
+  };
+};
 
 export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) {
   const [phase, setPhase] = useState<'instructions' | 'ready' | 'wait' | 'click' | 'results'>('instructions');
@@ -18,6 +39,7 @@ export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) 
   const [reactionTimes, setReactionTimes] = useState<number[]>([]);
   const [currentShape, setCurrentShape] = useState('circle');
   const [currentColor, setCurrentColor] = useState('bg-blue-500');
+  const [stimulusPosition, setStimulusPosition] = useState<Position>({ top: '50%', left: '50%' });
   const [waitTime, setWaitTime] = useState(0);
   const [tooSoon, setTooSoon] = useState(false);
 
@@ -30,6 +52,8 @@ export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) 
     setTimeout(() => {
       setCurrentShape(SHAPES[Math.floor(Math.random() * SHAPES.length)]);
       setCurrentColor(COLORS[Math.floor(Math.random() * COLORS.length)]);
+      // ✅ Generate new random position for this trial
+      setStimulusPosition(getRandomPosition());
       setStartTime(Date.now());
       setPhase('click');
     }, randomWait);
@@ -140,18 +164,25 @@ export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) 
 
   if (phase === 'click') {
     const renderShape = () => {
-      const baseClasses = `${currentColor} cursor-pointer hover:scale-110 transition-transform shadow-2xl`;
+      const baseClasses = `${currentColor} cursor-pointer hover:scale-110 transition-transform shadow-2xl absolute`;
+      // ✅ Apply random position with transform to center the shape at the position
+      const positionStyle = {
+        top: stimulusPosition.top,
+        left: stimulusPosition.left,
+        transform: 'translate(-50%, -50%)', // Center the shape at the random position
+      };
       
       switch (currentShape) {
         case 'circle':
-          return <div className={`${baseClasses} w-32 h-32 rounded-full`} />;
+          return <div className={`${baseClasses} w-32 h-32 rounded-full`} style={positionStyle} />;
         case 'square':
-          return <div className={`${baseClasses} w-32 h-32 rounded-lg`} />;
+          return <div className={`${baseClasses} w-32 h-32 rounded-lg`} style={positionStyle} />;
         case 'triangle':
           return (
             <div 
               className={`${baseClasses} w-0 h-0`}
               style={{
+                ...positionStyle,
                 borderLeft: '64px solid transparent',
                 borderRight: '64px solid transparent',
                 borderBottom: '110px solid currentColor',
@@ -159,7 +190,7 @@ export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) 
             />
           );
         default:
-          return <div className={`${baseClasses} w-32 h-32 rounded-full`} />;
+          return <div className={`${baseClasses} w-32 h-32 rounded-full`} style={positionStyle} />;
       }
     };
 
@@ -172,7 +203,7 @@ export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) 
           <p className="text-center text-lg font-bold text-green-600">CLICK NOW!</p>
         </CardHeader>
         <CardContent onClick={handleClick}>
-          <div className="flex items-center justify-center min-h-[400px] bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg cursor-pointer">
+          <div className="relative min-h-[400px] bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg cursor-pointer overflow-hidden">
             {renderShape()}
           </div>
         </CardContent>

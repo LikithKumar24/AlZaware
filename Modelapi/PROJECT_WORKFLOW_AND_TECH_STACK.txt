@@ -1,0 +1,1238 @@
+================================================================================
+           ALZAWARE - AI-POWERED ALZHEIMER'S DETECTION PLATFORM
+                    PROJECT WORKFLOW AND TECH STACK SUMMARY
+================================================================================
+
+Last Updated: November 9, 2025
+Project Version: 1.0
+Type: Full-Stack Web Application with Machine Learning Integration
+
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+PURPOSE:
+AlzAware is an AI-powered diagnostic platform designed to assist in the early 
+detection of Alzheimer's Disease through two primary methods:
+  - Cognitive assessment tests (memory, attention, processing speed, executive function)
+  - MRI brain scan analysis using deep learning models
+
+The platform serves both patients and healthcare professionals (doctors), 
+providing a complete workflow from initial assessment to doctor review and 
+ongoing monitoring.
+
+
+CORE FUNCTIONALITIES:
+  
+  For Patients:
+  - User registration and secure authentication
+  - Comprehensive cognitive testing suite (5 interactive tests)
+  - MRI scan upload and AI-powered analysis
+  - View test results and medical history
+  - Browse and connect with doctors
+  - Assign doctors for ongoing care
+  - Personal profile management
+
+  For Doctors:
+  - Secure professional login system
+  - Dashboard with patient overview
+  - View assigned patients' test results
+  - Access high-risk patient alerts
+  - Review MRI analysis and cognitive scores
+  - Professional profile management with credentials
+  - Browse and monitor patient progress
+
+
+KEY MEDICAL TESTS INCLUDED:
+  1. Memory Recall Test - Tests short-term memory with word lists
+  2. Stroop Color Test - Measures attention and cognitive interference
+  3. Digit Span Test - Evaluates working memory (forward/backward recall)
+  4. Reaction Time Test - Assesses processing speed
+  5. Trail Making Test - Tests executive function and visual scanning
+  6. MRI Scan Analysis - Deep learning classification of brain scans
+
+
+================================================================================
+2. USER WORKFLOW
+================================================================================
+
+-------------
+USER ROLES:
+-------------
+  1. PATIENT - Individuals seeking Alzheimer's screening and monitoring
+  2. DOCTOR - Healthcare professionals reviewing and managing patient data
+
+
+-------------------------
+PATIENT WORKFLOW (STEP-BY-STEP):
+-------------------------
+
+Step 1: Registration and Authentication
+  - User navigates to registration page
+  - Provides: email, password, full name, age, role (patient)
+  - System creates account in MongoDB database
+  - Password stored as plain text (note: simplified for prototype)
+  - User redirected to login page
+
+Step 2: Login
+  - User enters email and password
+  - Backend validates credentials
+  - JWT (JSON Web Token) generated and returned
+  - Token stored in browser localStorage
+  - User redirected to patient dashboard
+
+Step 3: Patient Dashboard
+  - Displays welcome message and user profile
+  - Shows three main action cards:
+    * Start New Assessment (Enhanced or Standard)
+    * View Doctors (browse and connect)
+    * Results History (past assessments)
+  - Sidebar allows quick navigation
+
+Step 4: Enhanced Cognitive Assessment
+  - User clicks "Enhanced Cognitive Test"
+  - Welcome screen explains 5-test sequence
+  - Tests execute sequentially:
+    a. Memory Recall (10 words, 10 seconds to memorize)
+    b. Stroop Color Test (15 trials of color-word matching)
+    c. Digit Span (forward and backward number sequences)
+    d. Reaction Time (12 trials of shape clicking)
+    e. Trail Making (connect numbered circles)
+  - Each test provides immediate feedback
+  - Progress bar shows completion status
+
+Step 5: Results Summary
+  - System calculates scores by category:
+    * Memory Score (average of memory tests)
+    * Attention Score (from Stroop test)
+    * Processing Speed (from reaction time)
+    * Executive Function (from trail making)
+    * Overall Cognitive Score (average of all)
+  - Results displayed with:
+    * Percentage scores
+    * Performance level (Excellent/Good/Fair/Needs Attention)
+    * Clinical interpretation text
+    * Category breakdowns
+  - Option to save results and proceed to MRI upload
+
+Step 6: MRI Upload
+  - User selects brain MRI scan image file
+  - Validation checks:
+    * File must be grayscale image
+    * Shape must match brain scan aspect ratio (0.75 - 1.3)
+    * Image undergoes shape analysis using OpenCV
+  - Valid image uploaded to backend server
+
+Step 7: AI Analysis
+  - Backend preprocesses image:
+    * Resize to 256x256
+    * Center crop to 224x224
+    * Normalize pixel values
+  - Image passed through ResNet50 deep learning model
+  - Model outputs:
+    * Prediction class (No Impairment/Mild/Moderate/Very Mild)
+    * Confidence score (0-100%)
+    * Probability distribution across all classes
+  - Results saved to database with timestamp
+
+Step 8: View Results
+  - Patient views combined results:
+    * Cognitive test scores
+    * MRI analysis prediction
+    * Confidence levels
+    * Assessment date/time
+  - Results History page shows all past assessments
+  - Each result displays trend information
+
+Step 9: Doctor Assignment (Optional)
+  - Patient navigates to "View Doctors" page
+  - Browses list of registered doctors with profiles:
+    * Name, specialization, experience
+    * Education and qualifications
+    * Contact information
+    * Current patient count
+  - Patient clicks "Assign as My Doctor"
+  - Doctor automatically added to patient's care team
+  - Doctor can now access patient's results
+
+
+-------------------------
+DOCTOR WORKFLOW (STEP-BY-STEP):
+-------------------------
+
+Step 1: Doctor Registration
+  - Registers with professional credentials
+  - Same authentication system as patients
+  - Role set to "doctor"
+  - Can add professional details later
+
+Step 2: Doctor Login
+  - Secure login with JWT authentication
+  - Redirected to doctor dashboard
+
+Step 3: Doctor Dashboard
+  - Shows summary statistics:
+    * Total assigned patients
+    * High-risk cases count
+    * Recent patient activity
+  - Lists all assigned patients with:
+    * Latest MRI result
+    * Latest cognitive score
+    * Risk level indicators
+  - Quick access to patient details
+
+Step 4: Patient Review
+  - Doctor clicks on specific patient
+  - Views comprehensive patient data:
+    * All cognitive test results
+    * All MRI scan analyses
+    * Historical trends
+    * Patient demographics
+  - Can analyze patterns over time
+
+Step 5: High-Risk Monitoring
+  - Dashboard highlights patients with:
+    * "Moderate Impairment" MRI results
+    * "Mild Impairment" MRI results
+    * Declining cognitive scores
+  - Sorted by severity and date
+  - Enables proactive intervention
+
+Step 6: Professional Profile Management
+  - Doctor can update profile:
+    * Professional photo
+    * Education history
+    * Career background
+    * Specializations
+    * Success stories
+  - Information visible to patients
+
+
+================================================================================
+3. DATA FLOW ARCHITECTURE
+================================================================================
+
+FRONTEND → BACKEND → DATABASE → AI MODEL → RESPONSE
+
+Detailed Flow:
+
+1. USER INTERACTION (Frontend)
+   ↓
+2. API REQUEST (HTTP/HTTPS)
+   - Request Type: GET, POST, PUT
+   - Headers: JWT Bearer Token
+   - Body: JSON data
+   ↓
+3. AUTHENTICATION MIDDLEWARE (Backend)
+   - Validates JWT token
+   - Extracts user information
+   - Checks user role permissions
+   ↓
+4. ROUTE HANDLER (FastAPI Endpoint)
+   - Processes request
+   - Applies business logic
+   ↓
+5. DATABASE OPERATION (MongoDB)
+   - Query or insert data
+   - Collections: users, assessments, cognitive_tests
+   ↓
+6. AI MODEL PROCESSING (if applicable)
+   - Load image/data
+   - Preprocess
+   - Run inference
+   - Generate predictions
+   ↓
+7. RESPONSE FORMATTING
+   - Convert to JSON
+   - Include relevant data
+   ↓
+8. SEND TO FRONTEND
+   - HTTP response
+   - Status codes: 200 (success), 400 (bad request), 401 (unauthorized), etc.
+   ↓
+9. FRONTEND UPDATE
+   - Update React state
+   - Re-render components
+   - Display results to user
+
+
+================================================================================
+4. FRONTEND ARCHITECTURE
+================================================================================
+
+FRAMEWORK: Next.js 15.5.4 with React 19.1.0
+
+LANGUAGE: TypeScript 5
+
+STYLING: Tailwind CSS 4 with custom components
+
+
+PAGE STRUCTURE:
+
+/pages/
+  ├── _app.tsx              → Main app wrapper with AuthProvider
+  ├── index.tsx             → Home/Dashboard (role-based rendering)
+  ├── login.tsx             → Login page
+  ├── register.tsx          → Registration page
+  ├── profile.tsx           → User profile management
+  ├── about.tsx             → About page
+  ├── assessment.tsx        → Assessment type selection
+  ├── cognitive-test.tsx    → Standard cognitive test (legacy)
+  ├── cognitive-test-enhanced.tsx  → Enhanced 5-test suite
+  ├── view-doctors.tsx      → Doctor profile browser
+  ├── results-history.tsx   → Patient results timeline
+  └── doctor/
+      └── [id].tsx          → Individual doctor detail page
+
+
+COMPONENT STRUCTURE:
+
+/components/
+  ├── ui/                   → Reusable UI components
+  │   ├── button.tsx        → Button with variants
+  │   ├── card.tsx          → Card container
+  │   ├── input.tsx         → Form input
+  │   ├── label.tsx         → Form label
+  │   ├── progress.tsx      → Progress bar
+  │   └── tabs.tsx          → Tab navigation
+  │
+  ├── layout/               → Layout components
+  │   ├── header.tsx        → Top navigation bar
+  │   └── sidebar.tsx       → Side navigation panel
+  │
+  ├── dashboard/            → Dashboard components
+  │   ├── PatientDashboard.tsx   → Patient home view
+  │   └── DoctorDashboard.tsx    → Doctor home view
+  │
+  ├── patient/              → Patient-specific components
+  │   └── AssignDoctor.tsx  → Doctor assignment widget
+  │
+  └── cognitive/            → Cognitive test components
+      ├── MemoryRecallTest.tsx    → Word memory test
+      ├── StroopTest.tsx          → Color-word test
+      ├── DigitSpanTest.tsx       → Number sequence test
+      ├── ReactionTimeTest.tsx    → Click speed test
+      ├── TrailMakingTest.tsx     → Number connection test
+      └── CognitiveSummary.tsx    → Results summary display
+
+
+STATE MANAGEMENT:
+
+  - React Context API for authentication (AuthContext)
+  - Local component state using useState hooks
+  - useEffect for side effects and data fetching
+  - JWT token stored in localStorage
+  - User object stored in localStorage
+
+
+STYLING APPROACH:
+
+  - Tailwind CSS utility classes
+  - Custom color palette defined in globals.css
+  - Responsive design (mobile-first)
+  - Dark mode support prepared (not fully implemented)
+  - Radix UI for accessible components
+  - Lucide React for icons
+
+
+KEY LIBRARIES:
+
+  - axios (v1.12.2) - HTTP requests
+  - next (v15.5.4) - React framework
+  - react (v19.1.0) - UI library
+  - tailwindcss (v4) - Styling
+  - lucide-react (v0.544.0) - Icons
+  - class-variance-authority - Component variants
+  - @radix-ui/* - Accessible UI primitives
+
+
+ROUTING:
+
+  - File-based routing via Next.js
+  - Dynamic routes: /doctor/[id]
+  - Protected routes check authentication in useEffect
+  - Role-based redirects (patient vs doctor views)
+
+
+================================================================================
+5. BACKEND ARCHITECTURE
+================================================================================
+
+FRAMEWORK: FastAPI (Python)
+
+SERVER: Uvicorn ASGI server
+
+LANGUAGE: Python 3.x
+
+
+API STRUCTURE:
+
+BASE URL: http://127.0.0.1:8000
+
+AUTHENTICATION ENDPOINTS:
+  POST   /token                    → Login, get JWT token
+  POST   /users/                   → Register new user
+  GET    /users/me                 → Get current user profile
+  PUT    /users/me/photo           → Upload profile photo
+  PUT    /users/me/professional-details  → Update doctor details
+
+
+ASSESSMENT ENDPOINTS:
+  POST   /predict                  → AI MRI analysis
+  POST   /assessments/             → Save MRI result
+  GET    /assessments/             → Get user's assessments
+  POST   /cognitive-tests/         → Save cognitive test result
+  GET    /cognitive-tests/         → Get cognitive test history
+
+
+DOCTOR ENDPOINTS:
+  GET    /doctors/all              → List all doctors
+  GET    /doctor/patients          → Get doctor's assigned patients
+  GET    /patients/all             → Get all patients (doctor only)
+  POST   /doctor/assign-patient    → Doctor assigns patient
+  GET    /assessments/high-risk    → Get high-risk patients
+  GET    /doctor/dashboard-summary → Doctor dashboard data
+
+
+PATIENT ENDPOINTS:
+  POST   /patient/assign-doctor    → Patient assigns doctor
+  GET    /doctors/all              → Browse available doctors
+
+
+DATABASE: MongoDB Atlas (Cloud-hosted)
+
+COLLECTIONS:
+  1. users
+     - _id (ObjectId)
+     - email (string, unique)
+     - password (string, plain text)
+     - full_name (string)
+     - age (integer)
+     - role (string: "patient" or "doctor")
+     - profile_photo_url (string, optional)
+     - assigned_patients (array of emails, for doctors)
+     - professional_details (object, for doctors)
+       * education (array)
+       * career_history (array)
+       * specializations (array)
+       * professional_experience (string)
+       * success_stories (array)
+
+  2. assessments
+     - _id (ObjectId)
+     - owner_email (string)
+     - prediction (string: classification result)
+     - confidence (float: 0-1)
+     - created_at (datetime)
+
+  3. cognitive_tests
+     - _id (ObjectId)
+     - owner_email (string)
+     - test_type (string)
+     - score (integer)
+     - total_questions (integer)
+     - memory_score (integer, optional)
+     - attention_score (integer, optional)
+     - processing_speed (integer, optional)
+     - executive_score (integer, optional)
+     - created_at (datetime)
+
+
+AUTHENTICATION:
+  - OAuth2 with JWT tokens
+  - Token secret: "a_very_secret_key_change_this_later"
+  - Algorithm: HS256
+  - Token expiration: 30 minutes
+  - Middleware validates token on protected routes
+
+
+SECURITY:
+  - CORS enabled for http://localhost:3000
+  - Password hashing: Currently plain text (needs improvement)
+  - JWT token verification on all protected endpoints
+  - Role-based access control (doctor/patient)
+
+
+FILE HANDLING:
+  - Uploads stored in /uploads directory
+  - Static file serving for profile photos
+  - Unique filenames: user_id + file_extension
+  - MRI scans validated before processing
+
+
+ERROR HANDLING:
+  - HTTPException for API errors
+  - Status codes: 400 (bad request), 401 (unauthorized), 403 (forbidden), 404 (not found)
+  - Descriptive error messages returned as JSON
+
+
+KEY PYTHON LIBRARIES:
+
+  - fastapi - Web framework
+  - uvicorn - ASGI server
+  - motor - Async MongoDB driver
+  - pydantic - Data validation
+  - python-jose - JWT handling
+  - torch - PyTorch deep learning
+  - torchvision - Image models and transforms
+  - Pillow (PIL) - Image processing
+  - opencv-cv2 - Computer vision operations
+  - numpy - Numerical operations
+  - certifi - SSL certificates
+  - email-validator - Email validation
+
+
+================================================================================
+6. MACHINE LEARNING / AI LAYER
+================================================================================
+
+PRIMARY MODEL: ResNet50 (Convolutional Neural Network)
+
+PURPOSE: Classify brain MRI scans into Alzheimer's disease stages
+
+
+MODEL ARCHITECTURE:
+
+  Base: ResNet50 pretrained on ImageNet
+  Modifications:
+    - Original final layer replaced
+    - New classifier head:
+      * Linear(2048 → 512)
+      * ReLU activation
+      * Dropout(0.5)
+      * Linear(512 → 4)  [4 output classes]
+
+  Output Classes:
+    1. No Impairment
+    2. Very Mild Impairment
+    3. Mild Impairment
+    4. Moderate Impairment
+
+
+MODEL LOADING PROCESS:
+
+  1. Check for model checkpoint file: best_model.pth
+  2. Load checkpoint containing:
+     - model_state (trained weights)
+     - class_names (classification labels)
+  3. Initialize ResNet50 with pretrained ImageNet weights
+  4. Replace final fully-connected layer
+  5. Load trained state_dict
+  6. Set model to evaluation mode
+  7. Move model to device (CPU or CUDA GPU)
+
+
+INFERENCE WORKFLOW:
+
+  Step 1: Image Upload
+    - User uploads MRI scan via frontend
+    - File sent as multipart/form-data
+
+  Step 2: Image Validation
+    - Read image bytes
+    - Convert to grayscale with OpenCV
+    - Apply thresholding to create binary mask
+    - Find contours (detect brain/skull shape)
+    - Calculate aspect ratio of largest contour
+    - Verify aspect ratio: 0.75 < ratio < 1.3
+    - Check if image is grayscale
+    - Reject if validation fails
+
+  Step 3: Preprocessing
+    - Open image with PIL
+    - Convert to RGB (3 channels)
+    - Resize to 256x256 pixels
+    - Center crop to 224x224 pixels
+    - Convert to tensor
+    - Normalize with ImageNet mean/std:
+      * Mean: [0.485, 0.456, 0.406]
+      * Std: [0.229, 0.224, 0.225]
+    - Add batch dimension
+    - Move to device (CPU/GPU)
+
+  Step 4: Model Prediction
+    - Pass tensor through model
+    - Get logits (raw scores)
+    - Apply softmax for probabilities
+    - Find class with highest probability
+    - Extract confidence score
+
+  Step 5: Return Results
+    - Prediction: class name
+    - Confidence: percentage (0-100%)
+    - Class probabilities: all 4 classes
+
+
+COGNITIVE TEST SCORING:
+
+  Each test component calculates scores locally:
+  
+  Memory Recall:
+    - Score: number of correctly recalled words (0-10)
+    - Max: 10 points
+
+  Stroop Test:
+    - Score: number of correct color identifications (0-15)
+    - Additional metric: average response time (milliseconds)
+    - Max: 15 points
+
+  Digit Span:
+    - Forward span: max length successfully repeated
+    - Backward span: max length successfully reversed
+    - Score: forward + backward (typically 3-8 each)
+    - Max: 16 points
+
+  Reaction Time:
+    - Average response time across 12 trials
+    - Score: converted to 0-100 scale (lower time = higher score)
+    - Max: 100 points
+
+  Trail Making:
+    - Completion time for connecting 12 numbers
+    - Error count
+    - Score: time-based with error penalties (0-100)
+    - Max: 100 points
+
+  Overall Cognitive Score:
+    - Average of category scores (memory, attention, speed, executive)
+    - Displayed as percentage
+    - Performance levels:
+      * 90-100%: Excellent
+      * 75-89%: Good
+      * 60-74%: Fair
+      * <60%: Needs Attention
+
+
+DATA PROCESSING TOOLS:
+
+  - PyTorch: Deep learning framework
+  - OpenCV: Image shape validation
+  - NumPy: Array operations
+  - PIL: Image loading and conversion
+  - Torchvision: Pretrained models and transforms
+
+
+MODEL PERFORMANCE:
+
+  - Training data: Brain MRI dataset with 4 classes
+  - Pretrained weights: ImageNet (transfer learning)
+  - Best model checkpoint saved during training
+  - Real-time inference on uploaded scans
+
+
+================================================================================
+7. TECHNOLOGY STACK SUMMARY
+================================================================================
+
+PROGRAMMING LANGUAGES:
+  - TypeScript (Frontend)
+  - Python 3.x (Backend & ML)
+  - CSS (Styling)
+
+
+FRONTEND TECHNOLOGIES:
+  Framework: Next.js 15.5.4
+  Library: React 19.1.0
+  Language: TypeScript 5
+  Styling: Tailwind CSS 4
+  UI Components: Radix UI
+  Icons: Lucide React
+  HTTP Client: Axios 1.12.2
+  State Management: React Context API
+  Animation: CSS transitions, Tailwind animations
+
+
+BACKEND TECHNOLOGIES:
+  Framework: FastAPI
+  Server: Uvicorn (ASGI)
+  Language: Python 3.x
+  Database: MongoDB Atlas (cloud)
+  Database Driver: Motor (async MongoDB)
+  Authentication: OAuth2 + JWT (python-jose)
+  Data Validation: Pydantic
+  File Upload: Python-multipart
+
+
+MACHINE LEARNING:
+  Framework: PyTorch
+  Model: ResNet50 (torchvision)
+  Computer Vision: OpenCV (cv2)
+  Image Processing: Pillow (PIL)
+  Numerical Computing: NumPy
+
+
+DATABASE:
+  Type: NoSQL (Document-oriented)
+  Service: MongoDB Atlas
+  Connection: Motor async driver
+  SSL: Certifi certificates
+
+
+AUTHENTICATION & SECURITY:
+  Method: JWT (JSON Web Tokens)
+  Library: python-jose
+  Hashing: Plain text (needs improvement - should use bcrypt)
+  Token Storage: Browser localStorage
+  CORS: Enabled for localhost:3000
+
+
+DEVELOPMENT TOOLS:
+  Package Manager (Frontend): npm
+  Package Manager (Backend): pip
+  Build Tool: Next.js Turbopack
+  Version Control: Git
+  Code Editor: VS Code (recommended)
+
+
+DEPLOYMENT ENVIRONMENT:
+  Frontend: Local development (npm run dev)
+  Backend: Local development (uvicorn main:app --reload)
+  Port: Frontend → 3000, Backend → 8000
+  Host: localhost / 127.0.0.1
+
+
+API COMMUNICATION:
+  Protocol: HTTP/HTTPS
+  Format: JSON
+  Authentication: Bearer Token (JWT)
+  CORS: Configured for cross-origin requests
+
+
+FILE STORAGE:
+  Profile Photos: /uploads directory
+  MRI Scans: Temporary upload processing
+  Model Checkpoint: /best_model.pth
+
+
+================================================================================
+8. INTEGRATION AND COMMUNICATION
+================================================================================
+
+FRONTEND ↔ BACKEND COMMUNICATION:
+
+  Method: RESTful API calls
+  Library: Axios
+  Base URL: http://127.0.0.1:8000
+
+  Request Flow:
+    1. User action triggers API call
+    2. Axios sends HTTP request with:
+       - Method: GET, POST, PUT
+       - Headers: Authorization Bearer Token
+       - Body: JSON data (for POST/PUT)
+    3. Backend receives and validates request
+    4. Processes data / runs AI model
+    5. Returns JSON response
+    6. Frontend updates state and UI
+
+
+AUTHENTICATION FLOW:
+
+  Registration:
+    Frontend → POST /users/ → Backend → MongoDB
+    ← User created response
+
+  Login:
+    Frontend → POST /token (email + password) → Backend
+    Backend validates → MongoDB lookup
+    ← JWT token + user object
+    Frontend stores in localStorage
+
+  Protected Routes:
+    Frontend → GET /endpoint + JWT header → Backend
+    Backend validates JWT → Extracts user
+    Backend checks permissions
+    ← Data or 401 Unauthorized
+
+
+FILE UPLOAD FLOW:
+
+  MRI Upload:
+    1. User selects file in frontend
+    2. File sent as multipart/form-data
+    3. POST /predict with file
+    4. Backend reads file bytes
+    5. Validates image (shape, grayscale)
+    6. Preprocesses for AI model
+    7. Runs inference
+    8. Returns prediction + confidence
+    9. Frontend displays results
+    10. POST /assessments/ to save result
+    11. MongoDB stores assessment record
+
+  Profile Photo:
+    1. User uploads photo
+    2. PUT /users/me/photo
+    3. Backend saves to /uploads/
+    4. Updates user document with photo URL
+    5. Returns updated user object
+    6. Frontend updates profile display
+
+
+DATA SYNCHRONIZATION:
+
+  - JWT token ensures user identity across requests
+  - Each request includes Authorization header
+  - Backend verifies token before processing
+  - User data fetched on app load from localStorage
+  - Fresh data fetched via API on page navigation
+
+
+ERROR HANDLING:
+
+  Frontend:
+    - Try-catch blocks around API calls
+    - Display user-friendly error messages
+    - Log errors to console
+    - Redirect on authentication failures
+
+  Backend:
+    - HTTPException for API errors
+    - Validation errors from Pydantic
+    - Database connection errors handled
+    - AI model errors caught and returned
+
+
+SESSION MANAGEMENT:
+
+  - JWT tokens expire after 30 minutes
+  - No automatic refresh (user must re-login)
+  - Token stored in localStorage (survives page refresh)
+  - Logout clears localStorage and redirects to login
+
+
+================================================================================
+9. KEY FEATURES IMPLEMENTATION
+================================================================================
+
+ROLE-BASED DASHBOARDS:
+  - Single index.tsx page
+  - useAuth hook determines user role
+  - Conditional rendering:
+    * role === 'patient' → PatientDashboard
+    * role === 'doctor' → DoctorDashboard
+  - Each dashboard has role-specific UI and data
+
+
+DOCTOR-PATIENT ASSIGNMENT:
+  - Patients browse doctors via /view-doctors
+  - Click "Assign as My Doctor"
+  - POST /patient/assign-doctor with doctor email
+  - Backend adds patient email to doctor's assigned_patients array
+  - Doctor can now view patient's results
+  - Two-way relationship management
+
+
+COGNITIVE TEST SUITE:
+  - Modular test components
+  - Each test runs independently
+  - Progress tracked through parent component
+  - Results stored in array of TestResult objects
+  - Summary calculates category averages
+  - All results sent to backend in single API call
+
+
+MRI ANALYSIS PIPELINE:
+  - Frontend: File input → FormData upload
+  - Backend: Validation → Preprocessing → AI inference
+  - Shape validation prevents non-MRI images
+  - Grayscale check ensures correct image type
+  - ResNet50 model processes 224x224 RGB tensor
+  - Softmax probabilities for all classes
+  - Result stored with timestamp and user link
+
+
+RESULTS VISUALIZATION:
+  - History page shows timeline of assessments
+  - Each result card displays:
+    * Date and time
+    * Test type (MRI or Cognitive)
+    * Score/Prediction
+    * Confidence level
+  - Color-coded performance indicators
+  - Trend analysis (future enhancement)
+
+
+================================================================================
+10. FUTURE EXPANSION OPPORTUNITIES
+================================================================================
+
+PLANNED FEATURES:
+
+1. AUDIO-BASED COGNITIVE TEST
+   - Speech recording for verbal fluency test
+   - Voice analysis for language assessment
+   - Automatic transcription and scoring
+   - Speech pattern recognition
+   - Integration with Web Audio API
+   - Backend: Speech-to-text processing
+   - ML: NLP model for linguistic analysis
+
+2. LONGITUDINAL TRACKING
+   - Charts showing cognitive decline/improvement over time
+   - Comparison of multiple MRI scans
+   - Automated alerting for significant changes
+   - Visualization library: Chart.js or Recharts
+
+3. TELEMEDICINE INTEGRATION
+   - Video consultations between patients and doctors
+   - Real-time chat messaging
+   - Appointment scheduling system
+   - Calendar integration
+
+4. ADVANCED AI MODELS
+   - 3D MRI analysis (volumetric data)
+   - Multi-modal learning (combine cognitive + imaging)
+   - Ensemble models for improved accuracy
+   - Explainable AI (highlight regions of concern)
+
+5. MOBILE APPLICATION
+   - React Native version
+   - Offline cognitive testing
+   - Push notifications for appointments
+   - Photo upload from device camera
+
+6. CAREGIVER PORTAL
+   - Third role: caregiver
+   - Monitor patient compliance
+   - Medication reminders
+   - Progress reports
+
+7. REPORTING SYSTEM
+   - PDF generation of medical reports
+   - Export data for external review
+   - Insurance claim documentation
+   - Research data anonymization
+
+8. ENHANCED SECURITY
+   - Proper password hashing (bcrypt)
+   - Two-factor authentication
+   - HIPAA compliance measures
+   - Encrypted data storage
+   - Audit logs
+
+9. MULTI-LANGUAGE SUPPORT
+   - Internationalization (i18n)
+   - Translated cognitive tests
+   - Localized medical terminology
+
+10. INTEGRATION WITH EHR SYSTEMS
+    - HL7 FHIR compatibility
+    - Export to standard medical formats
+    - Integration with hospital systems
+
+
+================================================================================
+11. DEVELOPMENT AND DEPLOYMENT
+================================================================================
+
+DEVELOPMENT SETUP:
+
+  Prerequisites:
+    - Node.js 20+ installed
+    - Python 3.x installed
+    - MongoDB Atlas account
+    - Git for version control
+
+  Frontend Setup:
+    1. Navigate to /frontend directory
+    2. Run: npm install
+    3. Run: npm run dev
+    4. Access: http://localhost:3000
+
+  Backend Setup:
+    1. Navigate to /Modelapi directory
+    2. Install dependencies: pip install -r requirements.txt
+    3. Ensure best_model.pth is present
+    4. Run: uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    5. Access: http://127.0.0.1:8000
+    6. API Docs: http://127.0.0.1:8000/docs
+
+  Database:
+    - MongoDB Atlas automatically connects via connection string
+    - No local setup required
+    - Collections created automatically on first use
+
+
+ENVIRONMENT VARIABLES:
+  - MongoDB connection string hardcoded (should be env var)
+  - JWT secret hardcoded (should be env var)
+  - API base URL hardcoded (should be configurable)
+
+
+TESTING:
+  - Manual testing through browser
+  - API testing via FastAPI /docs (Swagger UI)
+  - Unit tests: Not yet implemented
+  - Integration tests: Not yet implemented
+
+
+PRODUCTION CONSIDERATIONS:
+  - Use environment variables for secrets
+  - Implement proper password hashing
+  - Set up HTTPS/SSL certificates
+  - Configure production CORS origins
+  - Use production-grade database
+  - Implement rate limiting
+  - Add comprehensive logging
+  - Set up monitoring and alerting
+  - Create backup strategy
+  - Implement CI/CD pipeline
+
+
+PERFORMANCE OPTIMIZATION:
+  - Image lazy loading
+  - Code splitting in Next.js
+  - Database indexing on user emails
+  - Caching for frequently accessed data
+  - GPU acceleration for AI inference
+  - CDN for static assets
+
+
+================================================================================
+12. KNOWN LIMITATIONS AND IMPROVEMENTS
+================================================================================
+
+CURRENT LIMITATIONS:
+
+1. Security:
+   - Passwords stored as plain text (major security risk)
+   - No password strength requirements
+   - No two-factor authentication
+   - JWT secret is hardcoded
+
+2. Scalability:
+   - Single-instance backend (no load balancing)
+   - Synchronous file uploads
+   - No caching layer
+   - No CDN for static files
+
+3. User Experience:
+   - No forgot password functionality
+   - Limited error messages
+   - No email verification
+   - No user onboarding tutorial
+
+4. Data Management:
+   - No data export functionality
+   - No backup automation
+   - No data retention policies
+   - No GDPR compliance measures
+
+5. Testing:
+   - No automated tests
+   - No continuous integration
+   - Manual testing only
+
+6. Mobile Support:
+   - Responsive but not optimized for mobile
+   - Some cognitive tests difficult on small screens
+   - No native mobile app
+
+
+RECOMMENDED IMPROVEMENTS:
+
+High Priority:
+  - Implement bcrypt password hashing
+  - Add password reset functionality
+  - Environment variable configuration
+  - Input validation and sanitization
+  - Comprehensive error handling
+  - Automated testing suite
+
+Medium Priority:
+  - Email verification system
+  - Forgot password flow
+  - Enhanced mobile responsiveness
+  - Data export features
+  - Performance monitoring
+  - User activity logs
+
+Low Priority:
+  - Dark mode full implementation
+  - Advanced data visualization
+  - Batch processing for MRIs
+  - Multi-language support
+  - Social features (patient forums)
+
+
+================================================================================
+13. PROJECT STRUCTURE OVERVIEW
+================================================================================
+
+AlzAware/
+├── frontend/                      # Next.js frontend application
+│   ├── src/
+│   │   ├── pages/                 # Next.js pages (routes)
+│   │   ├── components/            # React components
+│   │   │   ├── ui/                # Base UI components
+│   │   │   ├── layout/            # Layout components
+│   │   │   ├── dashboard/         # Dashboard components
+│   │   │   ├── patient/           # Patient-specific
+│   │   │   └── cognitive/         # Cognitive test components
+│   │   ├── context/               # React Context providers
+│   │   │   └── AuthContext.tsx    # Authentication state
+│   │   ├── lib/                   # Utility functions
+│   │   └── styles/                # Global CSS
+│   ├── public/                    # Static assets
+│   ├── package.json               # Node dependencies
+│   ├── tsconfig.json              # TypeScript config
+│   └── tailwind.config.js         # Tailwind configuration
+│
+├── Modelapi/                      # FastAPI backend application
+│   ├── main.py                    # Main FastAPI app
+│   ├── security.py                # Auth utilities
+│   ├── requirements.txt           # Python dependencies
+│   ├── best_model.pth             # Trained AI model
+│   └── uploads/                   # User uploaded files
+│
+├── Documentation/                 # Project documentation
+│   ├── BUTTON_VISIBILITY_FIX.md
+│   ├── DIGIT_SPAN_BUG_FIX.md
+│   ├── ENHANCED_COGNITIVE_TESTS.md
+│   ├── IMPLEMENTATION_SUMMARY.md
+│   ├── VIEW_DOCTORS_FEATURE.md
+│   └── QUICKSTART_VIEW_DOCTORS.md
+│
+└── PROJECT_WORKFLOW_AND_TECH_STACK.txt  # This file
+
+
+================================================================================
+14. GLOSSARY OF TERMS
+================================================================================
+
+ALZHEIMER'S DISEASE: Progressive neurodegenerative disorder affecting memory 
+  and cognitive function, most common cause of dementia.
+
+MRI (MAGNETIC RESONANCE IMAGING): Medical imaging technique using magnetic 
+  fields to create detailed images of internal body structures, particularly 
+  useful for brain imaging.
+
+COGNITIVE ASSESSMENT: Standardized tests measuring mental abilities such as 
+  memory, attention, language, and executive function.
+
+JWT (JSON WEB TOKEN): Compact, URL-safe token used for authentication, 
+  containing encoded user information and signature.
+
+RESNET50: Deep learning architecture with 50 layers using residual connections, 
+  commonly used for image classification tasks.
+
+MONGODB ATLAS: Cloud-hosted MongoDB database service providing managed database 
+  infrastructure.
+
+FASTAPI: Modern Python web framework for building APIs with automatic 
+  interactive documentation.
+
+NEXT.JS: React framework enabling server-side rendering, static site generation, 
+  and optimized routing.
+
+TAILWIND CSS: Utility-first CSS framework for rapid UI development using 
+  predefined classes.
+
+AXIOS: Promise-based HTTP client for making API requests from browser or Node.js.
+
+OAUTH2: Industry-standard protocol for authorization, allowing secure delegated 
+  access.
+
+SOFTMAX: Function converting raw model outputs (logits) into probability 
+  distribution summing to 1.
+
+STROOP TEST: Neuropsychological test measuring selective attention and cognitive 
+  flexibility.
+
+DIGIT SPAN: Memory test measuring working memory capacity through number sequence 
+  recall.
+
+TRANSFER LEARNING: Machine learning technique using pretrained model as starting 
+  point for new task.
+
+CORS (CROSS-ORIGIN RESOURCE SHARING): Security feature controlling which domains 
+  can access API resources.
+
+
+================================================================================
+15. CONTACT AND CONTRIBUTION
+================================================================================
+
+PROJECT STATUS: Active Development (Prototype/MVP Phase)
+
+DEVELOPMENT TEAM: Individual/Academic Project
+
+VERSION: 1.0.0
+
+LAST MAJOR UPDATE: November 2025
+
+
+CONTRIBUTING:
+  - Follow existing code structure and naming conventions
+  - Add comments for complex logic
+  - Update documentation for new features
+  - Test thoroughly before committing
+  - Use TypeScript for type safety
+
+
+CODE STANDARDS:
+  - Frontend: ESLint + Prettier recommended
+  - Backend: PEP 8 Python style guide
+  - Commit messages: Descriptive and concise
+  - Branch naming: feature/, bugfix/, hotfix/
+
+
+DOCUMENTATION:
+  - Keep this file updated with major changes
+  - Document new API endpoints
+  - Add JSDoc comments for complex functions
+  - Create user guides for new features
+
+
+================================================================================
+16. CONCLUSION
+================================================================================
+
+AlzAware represents a comprehensive solution for early Alzheimer's detection,
+combining advanced machine learning with user-friendly interfaces for both
+patients and healthcare professionals. The platform integrates cognitive
+assessment tools with AI-powered MRI analysis, providing a holistic approach
+to screening and monitoring cognitive health.
+
+The modular architecture allows for easy expansion and integration of new
+features, while the use of modern technologies ensures scalability and
+maintainability. With continued development, AlzAware has the potential to
+become a valuable tool in the fight against Alzheimer's disease, enabling
+earlier detection and intervention.
+
+Key Strengths:
+  - Comprehensive cognitive testing suite
+  - AI-powered MRI analysis
+  - Role-based user system
+  - Doctor-patient connectivity
+  - Clean, intuitive interface
+  - Modular, maintainable code structure
+
+Areas for Growth:
+  - Enhanced security measures
+  - Mobile optimization
+  - Telemedicine integration
+  - Advanced analytics and reporting
+  - Multi-modal AI analysis
+  - Clinical validation and trials
+
+The platform stands ready for further development, testing, and eventual
+deployment as a tool to assist in the early detection and monitoring of
+Alzheimer's disease, potentially improving outcomes through timely
+intervention.
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+
+This document provides a comprehensive overview of the AlzAware platform's
+architecture, workflow, and technology stack. For specific technical details,
+refer to the codebase documentation and inline comments.
+
+Document Version: 1.0
+Last Updated: November 9, 2025
+Generated By: GitHub Copilot CLI
+Project: AlzAware - AI-Powered Alzheimer's Detection Platform

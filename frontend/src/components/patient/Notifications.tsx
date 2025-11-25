@@ -50,8 +50,13 @@ export default function Notifications({ maxDisplay = 3, showMarkAllRead = true }
       }
       
       console.log('[Notifications] Fetched', fetchedNotifications.length, 'notifications');
-    } catch (error) {
-      console.error('[Notifications] Failed to fetch notifications:', error);
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        console.warn('[Notifications] Authentication failed - token may be invalid or expired');
+        setNotifications([]);
+      } else {
+        console.error('[Notifications] Failed to fetch notifications:', error);
+      }
     } finally {
       setLoading(false);
     }
@@ -79,8 +84,16 @@ export default function Notifications({ maxDisplay = 3, showMarkAllRead = true }
       setTimeout(() => setShowToast(false), 3000);
       
       console.log('[Notifications] Marked all as read');
-    } catch (error) {
-      console.error('[Notifications] Failed to mark as read:', error);
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        console.warn('[Notifications] Authentication failed - cannot mark as read');
+        setToastMessage('Session expired. Please login again.');
+      } else {
+        console.error('[Notifications] Failed to mark as read:', error);
+        setToastMessage('Failed to mark notifications as read');
+      }
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
     }
   };
 

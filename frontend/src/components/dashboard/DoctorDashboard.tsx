@@ -264,7 +264,11 @@ export default function DoctorDashboard() {
   };
 
   const calculateCognitivePercentage = (score: number, total: number) => {
-    return Math.round((score / total) * 100);
+    const numScore = Number(score) || 0;
+    const numTotal = Number(total) || 0;
+    if (numTotal === 0 || !numTotal || !numScore) return 0;
+    const percentage = (numScore / numTotal) * 100;
+    return isNaN(percentage) || !isFinite(percentage) ? 0 : Math.round(percentage);
   };
 
   useEffect(() => {

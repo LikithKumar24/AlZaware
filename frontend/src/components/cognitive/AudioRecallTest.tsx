@@ -12,13 +12,72 @@ interface TestSentence {
   difficulty: 'short' | 'medium' | 'long';
 }
 
+// ✅ LARGE SENTENCE BANK - 30 easy, memory-friendly English sentences
 const TEST_SENTENCES: TestSentence[] = [
+  // Short sentences (easier)
   { text: 'The quick brown fox jumps over the lazy dog.', difficulty: 'short' },
   { text: 'A journey of a thousand miles begins with a single step.', difficulty: 'short' },
+  { text: 'Every cloud has a silver lining waiting to be found.', difficulty: 'short' },
+  { text: 'The early bird catches the worm in the morning.', difficulty: 'short' },
+  { text: 'Actions speak louder than words in every situation.', difficulty: 'short' },
+  { text: 'An apple a day keeps the doctor away from you.', difficulty: 'short' },
+  { text: 'Time and tide wait for no man in this world.', difficulty: 'short' },
+  { text: 'Where there is a will there is always a way.', difficulty: 'short' },
+  { text: 'Practice makes perfect when you work hard every day.', difficulty: 'short' },
+  { text: 'The pen is mightier than the sword in many ways.', difficulty: 'short' },
+  
+  // Medium sentences
   { text: 'In the middle of difficulty lies opportunity for growth and learning.', difficulty: 'medium' },
-  { text: 'The greatest glory in living lies not in never falling, but in rising every time we fall.', difficulty: 'medium' },
+  { text: 'The greatest glory in living lies not in never falling but rising.', difficulty: 'medium' },
+  { text: 'Success is not final and failure is not fatal in life.', difficulty: 'medium' },
+  { text: 'The future belongs to those who believe in beautiful dreams.', difficulty: 'medium' },
+  { text: 'Life is what happens when you are busy making other plans.', difficulty: 'medium' },
+  { text: 'The only way to do great work is to love what you do.', difficulty: 'medium' },
+  { text: 'Happiness is not something ready made but comes from actions.', difficulty: 'medium' },
+  { text: 'The best time to plant a tree was twenty years ago.', difficulty: 'medium' },
+  { text: 'Change your thoughts and you will change your world forever.', difficulty: 'medium' },
+  { text: 'The only impossible journey is the one you never start today.', difficulty: 'medium' },
+  
+  // Long sentences (challenging)
   { text: 'Believe you can and you are halfway there, success comes to those who persevere.', difficulty: 'long' },
+  { text: 'The greatest pleasure in life is doing what people say you cannot do successfully.', difficulty: 'long' },
+  { text: 'Do not go where the path may lead, go instead where there is no path.', difficulty: 'long' },
+  { text: 'The difference between ordinary and extraordinary is that little extra effort you give.', difficulty: 'long' },
+  { text: 'Success usually comes to those who are too busy to be looking for it everywhere.', difficulty: 'long' },
+  { text: 'Opportunities do not happen, you create them through hard work and dedication.', difficulty: 'long' },
+  { text: 'The secret of getting ahead is getting started with your dreams and goals.', difficulty: 'long' },
+  { text: 'Your time is limited, so do not waste it living someone else\'s life today.', difficulty: 'long' },
+  { text: 'If you set your goals ridiculously high and fail, you will succeed anyway.', difficulty: 'long' },
+  { text: 'The only person you are destined to become is the person you decide to be.', difficulty: 'long' },
 ];
+
+// ✅ Track last used sentence to avoid immediate repetition
+let lastUsedSentenceText: string = '';
+
+// ✅ Get a random sentence that's different from the last one
+function getRandomSentence(): TestSentence {
+  // Filter out the last used sentence
+  const availableSentences = TEST_SENTENCES.filter(s => s.text !== lastUsedSentenceText);
+  
+  // If by chance all sentences have been filtered (shouldn't happen with 30 sentences), use all
+  const sentencePool = availableSentences.length > 0 ? availableSentences : TEST_SENTENCES;
+  
+  // Fisher-Yates shuffle for true randomness
+  const shuffled = [...sentencePool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  
+  // Get the first sentence from shuffled array
+  const selected = shuffled[0];
+  lastUsedSentenceText = selected.text;
+  
+  console.log('🎯 Selected random sentence:', selected.text.substring(0, 50) + '...');
+  console.log('🔀 From pool of', sentencePool.length, 'sentences');
+  
+  return selected;
+}
 
 export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
   const [phase, setPhase] = useState<'instructions' | 'listen' | 'record' | 'results' | 'summary'>('instructions');
@@ -211,9 +270,9 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
   }, []); // Run once on mount
 
   const selectRandomSentence = () => {
-    const randomIndex = Math.floor(Math.random() * TEST_SENTENCES.length);
-    const selected = TEST_SENTENCES[randomIndex];
-    console.log('🎯 Selected sentence:', selected.text.substring(0, 50) + '...');
+    // ✅ Use new getRandomSentence() function with anti-repetition logic
+    const selected = getRandomSentence();
+    console.log('✅ Sentence selected for round:', selected.text.substring(0, 50) + '...');
     setCurrentSentence(selected);
     // CRITICAL FIX: Store in ref to ensure it's available during async operations
     currentSentenceRef.current = selected.text;
@@ -830,7 +889,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
             <Button
               onClick={handleTryAgain}
               variant="outline"
-              className="border-slate-300 hover:bg-slate-50"
+              className="bg-white text-slate-900 border-2 border-slate-400 hover:bg-slate-50 hover:text-slate-900 font-medium"
             >
               <RotateCcw className="mr-2 h-4 w-4" />
               Try Again
