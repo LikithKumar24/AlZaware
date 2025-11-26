@@ -67,11 +67,8 @@ const EnhancedCognitiveTestPage: NextPage = () => {
       additionalData = args[2] || {};
     } else if (testId === 'trail') {
       // Args: [completionTime, errors, finalScore]
-      const completionTimeMs = args[0];
-      // Formula: 20s or less = 100%. Every 1s slower = -2 points.
-      const timeSeconds = completionTimeMs / 1000;
-      const trailScore = Math.max(0, Math.min(100, 100 - ((timeSeconds - 20) * 2)));
-      score = Math.round(trailScore);
+      // Use the finalScore calculated by the component which includes penalties
+      score = args[2];
       maxScore = 100;
       additionalData = { errors: args[1] };
     } else {
@@ -382,10 +379,10 @@ const EnhancedCognitiveTestPage: NextPage = () => {
                   <div
                     key={test.id}
                     className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm ${index < currentTestIndex
-                        ? 'bg-green-100 text-green-700'
-                        : index === currentTestIndex
-                          ? 'bg-blue-100 text-blue-700 font-semibold'
-                          : 'bg-slate-100 text-slate-400'
+                      ? 'bg-green-100 text-green-700'
+                      : index === currentTestIndex
+                        ? 'bg-blue-100 text-blue-700 font-semibold'
+                        : 'bg-slate-100 text-slate-400'
                       }`}
                   >
                     {index < currentTestIndex && <CheckCircle className="h-4 w-4" />}
