@@ -48,9 +48,38 @@ const EnhancedCognitiveTestPage: NextPage = () => {
     }
   }, [user, router]);
 
-  const handleTestComplete = (testId: string, score: number, maxScore: number, additionalData?: any) => {
+  const handleTestComplete = (testId: string, ...args: any[]) => {
     const test = TESTS.find(t => t.id === testId);
     if (!test) return;
+
+    let score = 0;
+    let maxScore = 100;
+    let additionalData = {};
+
+    // 🧠 NORMALIZE SCORES BASED ON TEST TYPE
+    if (testId === 'reaction') {
+      // Args: [avgTime, rawScore, details]
+      const avgTime = args[0]; // Raw ms
+      // Formula: 200ms or less = 100%. Every 10ms slower = -1 point.
+      const reactionScore = Math.max(0, Math.min(100, 100 - ((avgTime - 200) / 10)));
+      score = Math.round(reactionScore);
+      maxScore = 100;
+      additionalData = args[2] || {};
+    } else if (testId === 'trail') {
+      // Args: [completionTime, errors, finalScore]
+      const completionTimeMs = args[0];
+      // Formula: 20s or less = 100%. Every 1s slower = -2 points.
+      const timeSeconds = completionTimeMs / 1000;
+      const trailScore = Math.max(0, Math.min(100, 100 - ((timeSeconds - 20) * 2)));
+      score = Math.round(trailScore);
+      maxScore = 100;
+      additionalData = { errors: args[1] };
+    } else {
+      // Default for Memory, Stroop, Digit (already return Score/Max)
+      score = args[0];
+      maxScore = args[1];
+      additionalData = args[2];
+    }
 
     const result: TestResult = {
       name: test.name,
@@ -70,254 +99,7 @@ const EnhancedCognitiveTestPage: NextPage = () => {
     }
   };
 
-  const handleSaveAndContinue = async () => {
-    // Validation checks
-    if (!testResults || testResults.length === 0) {
-      console.error('❌ No test results available');
-      alert('No test results to save. Please complete at least one test.');
-      return;
-    }
-
-    if (!token) {
-      console.error('❌ No authentication token');
-      alert('Authentication token missing. Please log in again.');
-      router.push('/login');
-      return;
-    }
-
-    setIsSaving(true);
-    
-    try {
-      // Get fresh token from localStorage to avoid stale token from context
-      const freshToken = localStorage.getItem('token');
-      
-      if (!freshToken) {
-        console.error('❌ No token found in localStorage');
-        alert('Session expired. Please log in again.');
-        router.push('/login');
-        return;
-      }
-
-      // Calculate category scores
-      const memoryResults = testResults.filter(r => r.category === 'memory');
-      const attentionResults = testResults.filter(r => r.category === 'attention');
-      const speedResults = testResults.filter(r => r.category === 'speed');
-      const executiveResults = testResults.filter(r => r.category === 'executive');
-
-      // Helper function to safely calculate percentage
-      const safePercent = (value: number, max: number): number => {
-        const numValue = Number(value) || 0;
-        const numMax = Number(max) || 0;
-        if (numMax === 0 || !numMax || !numValue) return 0;
-        return Math.round((numValue / numMax) * 100);
-      };
-
-      const calculateAverage = (results: TestResult[]) => {
-        if (results.length === 0) return 0;
-        const sum = results.reduce((acc, r) => {
-          const percentage = safePercent(r.score, r.maxScore);
-          return acc + percentage;
-        }, 0);
-        const average = sum / results.length;
-        return isNaN(average) || !isFinite(average) ? 0 : Math.round(average);
-      };
-
-      // Calculate all scores with fallback to 0
-      const memoryScore = calculateAverage(memoryResults);
-      const attentionScore = calculateAverage(attentionResults);
-      const speedScore = calculateAverage(speedResults);
-      const executiveScore = calculateAverage(executiveResults);
-      
-      // Calculate total score - ensure it's never NaN
-      const totalScore = Math.round((memoryScore + attentionScore + speedScore + executiveScore) / 4);
-
-      // ✅ STRICT TYPE CONVERSION - Convert ALL values to integers and ensure no NaN/null/undefined
-      const safeInt = (value: any): number => {
-        const num = Number(value);
-        if (isNaN(num) || !isFinite(num)) return 0;
-        return Math.round(num);
-      };
-
-      // Build payload with guaranteed integer values
-      const payload = {
-        test_type: 'Enhanced Cognitive Assessment',
-        score: safeInt(totalScore),
-        total_questions: 100,
-        memory_score: safeInt(memoryScore),
-        attention_score: safeInt(attentionScore),
-        processing_speed: safeInt(speedScore),
-        executive_score: safeInt(executiveScore),
-      };
-
-      // ✅ VALIDATION LOG - Show final payload with types
-      console.log('═══════════════════════════════════════════');
-      console.log('✅ PAYLOAD VALIDATION BEFORE SENDING:');
-      console.log('═══════════════════════════════════════════');
-      console.log('📤 Payload structure:', JSON.stringify(payload, null, 2));
-      console.log('📊 Type checks:');
-      console.log('  - test_type:', typeof payload.test_type, '=', payload.test_type);
-      console.log('  - score:', typeof payload.score, '=', payload.score);
-      console.log('  - total_questions:', typeof payload.total_questions, '=', payload.total_questions);
-      console.log('  - memory_score:', typeof payload.memory_score, '=', payload.memory_score);
-      console.log('  - attention_score:', typeof payload.attention_score, '=', payload.attention_score);
-      console.log('  - processing_speed:', typeof payload.processing_speed, '=', payload.processing_speed);
-      console.log('  - executive_score:', typeof payload.executive_score, '=', payload.executive_score);
-      console.log('═══════════════════════════════════════════');
-      console.log('📊 Test results count:', testResults.length);
-      console.log('🔑 Token present:', !!freshToken);
-      console.log('═══════════════════════════════════════════');
-
-      // ✅ FINAL VALIDATION - Ensure no field is null/undefined/NaN
-      const allFieldsValid = 
-        typeof payload.score === 'number' && !isNaN(payload.score) &&
-        typeof payload.total_questions === 'number' && !isNaN(payload.total_questions) &&
-        typeof payload.memory_score === 'number' && !isNaN(payload.memory_score) &&
-        typeof payload.attention_score === 'number' && !isNaN(payload.attention_score) &&
-        typeof payload.processing_speed === 'number' && !isNaN(payload.processing_speed) &&
-        typeof payload.executive_score === 'number' && !isNaN(payload.executive_score);
-
-      if (!allFieldsValid) {
-        console.error('❌ VALIDATION FAILED - Invalid field types detected!');
-        alert('Error: Invalid data format. Please try again.');
-        return;
-      }
-
-      console.log('✅ All fields validated successfully!');
-
-      // Save to backend using fresh token from localStorage
-      const response = await axios.post(
-        'http://127.0.0.1:8000/cognitive-tests/',
-        payload,
-        {
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${freshToken}` 
-          },
-        }
-      );
-
-      console.log('✅ Save successful:', response.data);
-      alert('Results saved successfully!');
-      router.push('/assessment/mri-upload');
-    } catch (error: any) {
-      console.error('❌ Failed to save results:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        headers: error.response?.headers
-      });
-      
-      let errorMessage = 'Failed to save results. Please try again.';
-      
-      if (error.response?.status === 401) {
-        errorMessage = 'Session expired. Please log in again.';
-        router.push('/login');
-      } else if (error.response?.status === 422) {
-        console.error('🔴 422 VALIDATION ERROR:', error.response?.data);
-        errorMessage = `Validation error: ${JSON.stringify(error.response?.data?.detail || error.response?.data)}`;
-      } else if (error.response?.data?.detail) {
-        if (typeof error.response.data.detail === 'string') {
-          errorMessage = `Error: ${error.response.data.detail}`;
-        } else {
-          errorMessage = `Error: ${JSON.stringify(error.response.data.detail)}`;
-        }
-      } else if (error.message) {
-        errorMessage = `Error: ${error.message}`;
-      }
-      
-      alert(errorMessage);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (!user) {
-    return null;
-  }
-
-  // Welcome Screen
-  if (currentTestIndex === -1) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-2xl shadow-2xl">
-          <CardHeader className="text-center space-y-4">
-            <div className="flex justify-center">
-              <div className="bg-blue-100 p-4 rounded-full">
-                <Brain className="h-16 w-16 text-blue-600" />
-              </div>
-            </div>
-            <CardTitle className="text-4xl font-bold text-slate-900">
-              Enhanced Cognitive Assessment
-            </CardTitle>
-            <p className="text-lg text-slate-600">
-              A comprehensive evaluation of your cognitive abilities
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
-              <h3 className="font-semibold text-blue-900 mb-3 text-lg">
-                This assessment includes {TESTS.length} scientifically-validated tests:
-              </h3>
-              <ul className="space-y-3">
-                {TESTS.map((test, index) => (
-                  <li key={test.id} className="flex items-start gap-3">
-                    <div className={`bg-${test.color}-100 text-${test.color}-600 rounded-full w-8 h-8 flex items-center justify-center font-bold flex-shrink-0`}>
-                      {index + 1}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-800">{test.name}</div>
-                      <div className="text-sm text-slate-600">
-                        {test.category === 'memory' && 'Tests your ability to store and recall information'}
-                        {test.category === 'attention' && 'Tests your focus and selective attention'}
-                        {test.category === 'speed' && 'Tests your processing speed and reaction time'}
-                        {test.category === 'executive' && 'Tests planning and task-switching abilities'}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
-              <p className="text-sm text-yellow-900">
-                <strong>⏱️ Estimated Time:</strong> 15-20 minutes<br />
-                <strong>📱 Best Experience:</strong> Use a desktop or tablet<br />
-                <strong>🔇 Environment:</strong> Find a quiet space without distractions
-              </p>
-            </div>
-
-            <Button 
-              onClick={() => setCurrentTestIndex(0)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-xl py-8"
-              size="lg"
-            >
-              Begin Assessment
-            </Button>
-
-            <p className="text-center text-sm text-slate-500">
-              Your progress will be saved automatically
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Summary Screen
-  if (isComplete) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl">
-          <CognitiveSummary 
-            results={testResults}
-            onSaveAndContinue={handleSaveAndContinue}
-            isSaving={isSaving}
-          />
-        </div>
-      </div>
-    );
-  }
+  // ... (existing code)
 
   // Test Screen
   const CurrentTestComponent = TESTS[currentTestIndex].component;
@@ -346,19 +128,18 @@ const EnhancedCognitiveTestPage: NextPage = () => {
                 </div>
               </div>
               <Progress value={progress} className="h-3" />
-              
+
               {/* Completed tests indicators */}
               <div className="flex items-center gap-2 flex-wrap">
                 {TESTS.map((test, index) => (
                   <div
                     key={test.id}
-                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm ${
-                      index < currentTestIndex
+                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm ${index < currentTestIndex
                         ? 'bg-green-100 text-green-700'
                         : index === currentTestIndex
-                        ? 'bg-blue-100 text-blue-700 font-semibold'
-                        : 'bg-slate-100 text-slate-400'
-                    }`}
+                          ? 'bg-blue-100 text-blue-700 font-semibold'
+                          : 'bg-slate-100 text-slate-400'
+                      }`}
                   >
                     {index < currentTestIndex && <CheckCircle className="h-4 w-4" />}
                     <span>{test.name}</span>
@@ -371,8 +152,8 @@ const EnhancedCognitiveTestPage: NextPage = () => {
 
         {/* Current Test Component */}
         <CurrentTestComponent
-          onComplete={(score: number, maxScore: number, additionalData?: any) => {
-            handleTestComplete(currentTest.id, score, maxScore, additionalData);
+          onComplete={(...args: any[]) => {
+            handleTestComplete(currentTest.id, ...args);
           }}
         />
       </div>

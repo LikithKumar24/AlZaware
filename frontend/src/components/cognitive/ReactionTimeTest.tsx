@@ -300,6 +300,75 @@ export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) 
             </p>
           </div>
 
+          {/* Detailed Trial Breakdown */}
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-slate-100 px-4 py-2 border-b font-semibold text-slate-700">Detailed Trial Breakdown</div>
+            <div className="max-h-64 overflow-y-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-2">Trial</th>
+                    <th className="px-4 py-2">Stimulus</th>
+                    <th className="px-4 py-2">Action</th>
+                    <th className="px-4 py-2">Time</th>
+                    <th className="px-4 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r, i) => {
+                    let statusColor = 'text-slate-600';
+                    let statusText = '';
+                    let actionText = '';
+
+                    // Determine Status & Action
+                    if (r.outcome === 'success') {
+                      statusColor = 'text-green-600 font-bold';
+                      statusText = 'Success';
+                      actionText = r.type === 'go' ? 'Clicked' : 'No Click';
+                    } else if (r.outcome === 'miss') {
+                      statusColor = 'text-red-600 font-bold';
+                      statusText = 'Missed';
+                      actionText = 'No Click';
+                    } else if (r.outcome === 'commission_error') {
+                      statusColor = 'text-red-600 font-bold';
+                      statusText = 'Error';
+                      actionText = 'Clicked';
+                    } else if (r.outcome === 'false_start') {
+                      statusColor = 'text-red-600 font-bold';
+                      statusText = 'False Start';
+                      actionText = 'Early Click';
+                    }
+
+                    // Check for slow reaction
+                    if (r.reactionTime && r.reactionTime > 1000 && r.outcome === 'success') {
+                      statusColor = 'text-orange-500 font-bold';
+                      statusText = 'Slow';
+                    }
+
+                    return (
+                      <tr key={i} className="border-b last:border-0 hover:bg-slate-50 even:bg-slate-50/50">
+                        <td className="px-4 py-2 font-medium text-slate-700">{r.trialNumber}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${r.type === 'go' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            <span className="text-xs text-slate-500">{r.type === 'go' ? 'Go' : 'No-Go'}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-slate-600">{actionText}</td>
+                        <td className="px-4 py-2 font-mono font-bold text-slate-700">
+                          {r.reactionTime ? `${r.reactionTime}ms` : <span className="text-slate-400">N/A</span>}
+                        </td>
+                        <td className={`px-4 py-2 ${statusColor}`}>
+                          {statusText}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <Button onClick={handleComplete} className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6">
             Save & Continue
           </Button>
@@ -378,7 +447,7 @@ export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) 
                   <AlertCircle className="w-16 h-16 text-blue-500 mx-auto mb-2" />
                 )}
                 <p className={`text-2xl font-bold ${feedback.type === 'success' ? 'text-green-600' :
-                    feedback.type === 'error' ? 'text-red-600' : 'text-blue-600'
+                  feedback.type === 'error' ? 'text-red-600' : 'text-blue-600'
                   }`}>
                   {feedback.message}
                 </p>
