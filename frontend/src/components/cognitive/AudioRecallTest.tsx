@@ -25,7 +25,7 @@ const TEST_SENTENCES: TestSentence[] = [
   { text: 'Where there is a will there is always a way.', difficulty: 'short' },
   { text: 'Practice makes perfect when you work hard every day.', difficulty: 'short' },
   { text: 'The pen is mightier than the sword in many ways.', difficulty: 'short' },
-  
+
   // Medium sentences
   { text: 'In the middle of difficulty lies opportunity for growth and learning.', difficulty: 'medium' },
   { text: 'The greatest glory in living lies not in never falling but rising.', difficulty: 'medium' },
@@ -37,7 +37,7 @@ const TEST_SENTENCES: TestSentence[] = [
   { text: 'The best time to plant a tree was twenty years ago.', difficulty: 'medium' },
   { text: 'Change your thoughts and you will change your world forever.', difficulty: 'medium' },
   { text: 'The only impossible journey is the one you never start today.', difficulty: 'medium' },
-  
+
   // Long sentences (challenging)
   { text: 'Believe you can and you are halfway there, success comes to those who persevere.', difficulty: 'long' },
   { text: 'The greatest pleasure in life is doing what people say you cannot do successfully.', difficulty: 'long' },
@@ -58,24 +58,24 @@ let lastUsedSentenceText: string = '';
 function getRandomSentence(): TestSentence {
   // Filter out the last used sentence
   const availableSentences = TEST_SENTENCES.filter(s => s.text !== lastUsedSentenceText);
-  
+
   // If by chance all sentences have been filtered (shouldn't happen with 30 sentences), use all
   const sentencePool = availableSentences.length > 0 ? availableSentences : TEST_SENTENCES;
-  
+
   // Fisher-Yates shuffle for true randomness
   const shuffled = [...sentencePool];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  
+
   // Get the first sentence from shuffled array
   const selected = shuffled[0];
   lastUsedSentenceText = selected.text;
-  
+
   console.log('🎯 Selected random sentence:', selected.text.substring(0, 50) + '...');
   console.log('🔀 From pool of', sentencePool.length, 'sentences');
-  
+
   return selected;
 }
 
@@ -94,10 +94,11 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
   const [retryCount, setRetryCount] = useState(0);
   const [micPermission, setMicPermission] = useState<'granted' | 'denied' | 'prompt' | 'checking'>('checking');
   const [isListening, setIsListening] = useState(false);
-  
+
   const recognitionRef = useRef<any>(null);
   const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const transcriptRef = useRef<string>('');
+  const committedTranscriptRef = useRef<string>(''); // ✅ New ref to track finalized text
   const stopTimerRef = useRef<any>(null);
   const speechDetectedRef = useRef<boolean>(false);
   const currentSentenceRef = useRef<string>('');
@@ -106,10 +107,10 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
     // Check browser support
     const hasSpeechSynthesis = 'speechSynthesis' in window;
     const hasSpeechRecognition = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
-    
+
     console.log('🔍 Browser support check:', { hasSpeechSynthesis, hasSpeechRecognition });
     console.log('🔒 Protocol:', window.location.protocol);
-    
+
     setBrowserSupport({
       speech: hasSpeechSynthesis,
       recognition: hasSpeechRecognition
@@ -134,7 +135,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
     if (hasSpeechRecognition && !recognitionRef.current) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      
+
       // Configure recognition for optimal capture
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
@@ -146,6 +147,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
         setIsListening(true);
         setErrorMessage('');
         transcriptRef.current = '';
+        committedTranscriptRef.current = ''; // ✅ Reset committed text
         speechDetectedRef.current = false;
       };
 
@@ -157,12 +159,12 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
       recognitionRef.current.onresult = (event: any) => {
         console.log('📝 Recognition result received, results count:', event.results.length);
         let interimTranscript = '';
-        let finalTranscript = '';
-        
+        let newFinalTranscript = '';
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
+            newFinalTranscript += transcript + ' ';
             console.log('✅ Final transcript chunk:', transcript);
           } else {
             interimTranscript += transcript;
@@ -170,26 +172,29 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
           }
         }
 
-        // Always update with latest transcript (prioritize final, fallback to interim)
-        if (finalTranscript) {
-          transcriptRef.current = (transcriptRef.current + ' ' + finalTranscript).trim();
-          console.log('💾 Accumulated final transcript:', transcriptRef.current);
-        } else if (interimTranscript && !transcriptRef.current) {
-          transcriptRef.current = interimTranscript.trim();
-          console.log('💬 Using interim transcript:', transcriptRef.current);
+        // ✅ Update committed transcript with new final results
+        if (newFinalTranscript) {
+          committedTranscriptRef.current = (committedTranscriptRef.current + ' ' + newFinalTranscript).trim();
         }
+
+        // ✅ Construct full transcript: Committed + Interim
+        // This ensures we don't duplicate words when interim becomes final
+        const currentFullTranscript = (committedTranscriptRef.current + ' ' + interimTranscript).trim();
+
+        transcriptRef.current = currentFullTranscript;
+        console.log('💾 Updated transcript:', transcriptRef.current);
       };
 
       recognitionRef.current.onspeechend = () => {
         console.log('🛑 Speech ended event fired, speech detected:', speechDetectedRef.current);
-        
+
         // CRITICAL FIX: Only stop if speech was actually detected
         // This prevents Chrome's false-positive speechend from stopping recognition prematurely
         if (!speechDetectedRef.current) {
           console.log('⚠️ Ignoring false speechend - no speech detected yet');
           return;
         }
-        
+
         // Give extra time for final results to come through after speech ends
         console.log('⏱️ Speech ended, waiting 2 seconds for final results...');
         setTimeout(() => {
@@ -207,7 +212,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
       recognitionRef.current.onerror = (event: any) => {
         console.error('⚠️ Speech recognition error:', event.error);
         setIsListening(false);
-        
+
         if (event.error === 'no-speech') {
           setIsRecording(false);
           setErrorMessage('No speech detected. Please speak clearly and try again.');
@@ -230,22 +235,22 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
       recognitionRef.current.onend = () => {
         console.log('🏁 Recognition ended');
         setIsListening(false);
-        
+
         // Clear any pending stop timer
         if (stopTimerRef.current) {
           clearTimeout(stopTimerRef.current);
           stopTimerRef.current = null;
         }
-        
+
         const finalText = transcriptRef.current.trim();
         console.log('📄 Final text from ref:', finalText);
-        
+
         if (finalText) {
           console.log('💾 Processing transcript:', finalText);
           setSpokenText(finalText);
           setIsRecording(false);
           setRetryCount(0);
-          
+
           // Process with the transcript - we'll get the original from state in the callback
           setTimeout(() => {
             // Use a small delay to ensure state is settled
@@ -317,7 +322,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
     // CRITICAL FIX: Ensure we have a sentence to compare against before starting recording
     // Check both state and ref
     const sentenceText = currentSentence?.text || currentSentenceRef.current;
-    
+
     if (!sentenceText) {
       console.error('❌ No sentence selected for recording');
       console.error('State:', currentSentence);
@@ -335,10 +340,11 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
     setSpokenText('');
     setErrorMessage('');
     transcriptRef.current = '';
+    committedTranscriptRef.current = ''; // ✅ Reset committed text
     speechDetectedRef.current = false;
-    
+
     console.log('🎬 Starting recording with 1.5s delay...');
-    
+
     // Add 1.5s delay before starting recognition to allow mic warm-up
     setTimeout(() => {
       try {
@@ -349,19 +355,19 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
           } catch (e) {
             // Ignore if already stopped
           }
-          
+
           // Wait a moment, then start
           setTimeout(() => {
             try {
               recognitionRef.current.start();
               console.log('▶️ Recognition start called');
-              
+
               // Auto-stop after 10 seconds to ensure we capture the response
               // Clear any existing timer first
               if (stopTimerRef.current) {
                 clearTimeout(stopTimerRef.current);
               }
-              
+
               stopTimerRef.current = setTimeout(() => {
                 if (recognitionRef.current) {
                   console.log('⏰ Auto-stopping after 10 seconds');
@@ -395,13 +401,13 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
 
   const handleStopRecording = () => {
     console.log('⏹️ Stopping recording manually');
-    
+
     // Clear auto-stop timer
     if (stopTimerRef.current) {
       clearTimeout(stopTimerRef.current);
       stopTimerRef.current = null;
     }
-    
+
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -418,23 +424,23 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
     console.log('📝 Current sentence from ref:', currentSentenceRef.current || '(empty)');
     console.log('📝 Current sentence from state:', currentSentence?.text || '(null)');
     console.log('🗣️ Spoken text:', spokenText || '(empty)');
-    
+
     // CRITICAL FIX: Use ref value instead of state to avoid timing issues
     const originalText = currentSentenceRef.current;
-    
+
     if (!originalText) {
       console.error('❌ No original sentence in ref');
       console.error('State value:', currentSentence?.text || '(null)');
       setErrorMessage('System error: Missing original sentence. Please try again.');
       return;
     }
-    
+
     if (!spokenText) {
       console.error('❌ No spoken text provided');
       setErrorMessage('Missing text for comparison. Please try again.');
       return;
     }
-    
+
     console.log('✅ Both texts available, proceeding to comparison');
     console.log('🔹 Using ref sentence for comparison:', originalText.substring(0, 50) + '...');
     handleTextComparison(originalText, spokenText);
@@ -442,7 +448,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
 
   const handleTextComparison = async (original: string, spoken: string) => {
     // Defensive checks with detailed logging
-    console.log('🔍 handleTextComparison called with:'); 
+    console.log('🔍 handleTextComparison called with:');
     console.log('  📄 Original:', original?.substring(0, 50) || '(empty)');
     console.log('  🗣️ Spoken:', spoken?.substring(0, 50) || '(empty)');
     console.log('  📌 Ref value:', currentSentenceRef.current?.substring(0, 50) || '(empty)');
@@ -456,15 +462,15 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
 
     setIsProcessing(true);
     console.log('🔄 Sending comparison request to backend...');
-    
+
     try {
       const payload = {
         original: original,
         spoken: spoken
       };
-      
+
       console.log('📤 Payload being sent:', payload);
-      
+
       const response = await fetch('http://127.0.0.1:8000/compare-text', {
         method: 'POST',
         headers: {
@@ -544,7 +550,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
   const handleComplete = () => {
     const averageScore = roundResults.reduce((sum, r) => sum + r.similarityScore, 0) / roundResults.length;
     const correctCount = roundResults.filter(r => r.correct).length;
-    
+
     onComplete(correctCount, 3, {
       averageScore,
       roundResults,
@@ -643,8 +649,8 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
             </p>
           </div>
 
-          <Button 
-            onClick={startTest} 
+          <Button
+            onClick={startTest}
             className="w-full bg-pink-600 hover:bg-pink-700 text-white text-lg py-6"
             disabled={micPermission === 'denied'}
           >
@@ -666,7 +672,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
         <CardContent className="space-y-6">
           <div className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-lg p-8 text-center min-h-[300px] flex flex-col items-center justify-center">
             <Volume2 className={`h-24 w-24 text-pink-600 mb-6 ${isPlaying ? 'animate-pulse' : ''}`} />
-            
+
             {!isPlaying && (
               <div className="space-y-4">
                 <p className="text-lg text-slate-700 mb-4">
@@ -838,7 +844,7 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
 
   if (phase === 'results') {
     const isCorrect = similarityScore >= 70;
-    
+
     return (
       <Card className="w-full">
         <CardHeader>
@@ -948,9 +954,8 @@ export default function AudioRecallTest({ onComplete }: AudioRecallTestProps) {
             {roundResults.map((result, index) => (
               <div
                 key={index}
-                className={`flex items-center justify-between p-3 rounded-lg border-2 ${
-                  result.correct ? 'bg-green-50 border-green-300' : 'bg-orange-50 border-orange-300'
-                }`}
+                className={`flex items-center justify-between p-3 rounded-lg border-2 ${result.correct ? 'bg-green-50 border-green-300' : 'bg-orange-50 border-orange-300'
+                  }`}
               >
                 <div className="flex-1">
                   <span className="font-semibold text-slate-800">Round {result.round}</span>

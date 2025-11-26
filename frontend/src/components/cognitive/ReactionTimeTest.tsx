@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Zap } from 'lucide-react';
+import { Zap, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 
 interface ReactionTimeTestProps {
-  onComplete: (avgTime: number, score: number) => void;
+  onComplete: (avgTime: number, score: number, details: any) => void;
 }
 
 interface Position {
@@ -12,20 +12,26 @@ interface Position {
   left: string;
 }
 
-const COLORS = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500'];
-const SHAPES = ['circle', 'square', 'triangle'];
-const NUM_TRIALS = 12;
+interface TrialResult {
+  trialNumber: number;
+  type: 'go' | 'no-go';
+  reactionTime?: number;
+  outcome: 'success' | 'miss' | 'commission_error' | 'false_start';
+}
 
-// ✅ Generate random position within safe boundaries
+const SHAPES = ['circle', 'square', 'triangle'];
+const TOTAL_TRIALS = 15;
+const GO_PROBABILITY = 0.7; // 70% Go (Green), 30% No-Go (Red)
+const TIMEOUT_MS = 2000; // 2 seconds to respond
+
+// ✅ Generate random position within safe boundaries (20-80%)
 const getRandomPosition = (): Position => {
-  // Use percentages for responsive positioning
-  // Keep shape within 20-80% of container to avoid edges
   const minPercent = 20;
   const maxPercent = 80;
-  
+
   const randomTop = Math.random() * (maxPercent - minPercent) + minPercent;
   const randomLeft = Math.random() * (maxPercent - minPercent) + minPercent;
-  
+
   return {
     top: `${randomTop}%`,
     left: `${randomLeft}%`
@@ -33,81 +39,201 @@ const getRandomPosition = (): Position => {
 };
 
 export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) {
-  const [phase, setPhase] = useState<'instructions' | 'ready' | 'wait' | 'click' | 'results'>('instructions');
-  const [trial, setTrial] = useState(0);
-  const [startTime, setStartTime] = useState(0);
-  const [reactionTimes, setReactionTimes] = useState<number[]>([]);
-  const [currentShape, setCurrentShape] = useState('circle');
-  const [currentColor, setCurrentColor] = useState('bg-blue-500');
+  const [phase, setPhase] = useState<'instructions' | 'ready' | 'wait' | 'stimulus' | 'feedback' | 'results'>('instructions');
+  const [currentTrialIndex, setCurrentTrialIndex] = useState(0);
+  const [trialConfig, setTrialConfig] = useState<{ type: 'go' | 'no-go', shape: string }[]>([]);
   const [stimulusPosition, setStimulusPosition] = useState<Position>({ top: '50%', left: '50%' });
-  const [waitTime, setWaitTime] = useState(0);
-  const [tooSoon, setTooSoon] = useState(false);
+  const [startTime, setStartTime] = useState(0);
+  const [results, setResults] = useState<TrialResult[]>([]);
+  const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' | 'neutral' } | null>(null);
+  const [waitingForNext, setWaitingForNext] = useState(false);
 
-  const startTrial = () => {
-    setTooSoon(false);
-    setPhase('wait');
-    const randomWait = Math.random() * 3000 + 1000; // 1-4 seconds
-    setWaitTime(randomWait);
-    
-    setTimeout(() => {
-      setCurrentShape(SHAPES[Math.floor(Math.random() * SHAPES.length)]);
-      setCurrentColor(COLORS[Math.floor(Math.random() * COLORS.length)]);
-      // ✅ Generate new random position for this trial
-      setStimulusPosition(getRandomPosition());
-      setStartTime(Date.now());
-      setPhase('click');
-    }, randomWait);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Initialize trials
+  useEffect(() => {
+    const newTrials = Array.from({ length: TOTAL_TRIALS }).map(() => ({
+      type: Math.random() < GO_PROBABILITY ? 'go' : 'no-go' as 'go' | 'no-go',
+      shape: SHAPES[Math.floor(Math.random() * SHAPES.length)]
+    }));
+    setTrialConfig(newTrials);
+  }, []);
+
+  const clearTimers = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
   };
 
-  const handleClick = () => {
-    if (phase === 'wait') {
-      setTooSoon(true);
-      setTimeout(() => startTrial(), 1000);
-      return;
+  const startTrial = useCallback(() => {
+    clearTimers();
+    setPhase('wait');
+    setFeedback(null);
+    setWaitingForNext(false);
+
+    const randomWait = Math.random() * 2000 + 1500; // 1.5 - 3.5 seconds wait
+
+    timeoutRef.current = setTimeout(() => {
+      setStimulusPosition(getRandomPosition());
+      setStartTime(Date.now());
+      setPhase('stimulus');
+
+      // Set timeout for missing the stimulus
+      timeoutRef.current = setTimeout(() => {
+        handleTimeout();
+      }, TIMEOUT_MS);
+    }, randomWait);
+  }, [currentTrialIndex, trialConfig]);
+
+  const handleTimeout = () => {
+    const currentType = trialConfig[currentTrialIndex].type;
+
+    if (currentType === 'go') {
+      // Missed a Go signal
+      recordResult('miss');
+      showFeedback('Missed!', 'error');
+    } else {
+      // Correctly ignored a No-Go signal
+      recordResult('success');
+      showFeedback('Good hold!', 'success');
     }
-    
-    if (phase === 'click') {
-      const reactionTime = Date.now() - startTime;
-      setReactionTimes([...reactionTimes, reactionTime]);
-      
-      if (trial < NUM_TRIALS - 1) {
-        setTrial(trial + 1);
-        setPhase('ready');
+  };
+
+  const handleGlobalClick = () => {
+    if (phase === 'wait') {
+      // False start!
+      clearTimers();
+      showFeedback('Too Early!', 'error');
+      // Don't record result yet, just restart trial logic after delay
+      // Or penalize? Let's penalize as a false start but allow retry of the trial slot?
+      // For simplicity in this clinically valid version, we record it as an error and move on, 
+      // OR we just warn and restart. Let's warn and restart the wait period to be strict but fair.
+      // Actually, standard Go/No-Go usually counts false starts. Let's count it.
+      recordResult('false_start');
+    }
+  };
+
+  const handleStimulusClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent global click
+    if (phase !== 'stimulus') return;
+
+    clearTimers();
+    const reactionTime = Date.now() - startTime;
+    const currentType = trialConfig[currentTrialIndex].type;
+
+    if (currentType === 'go') {
+      // Correct click
+      recordResult('success', reactionTime);
+      showFeedback('Good!', 'success');
+    } else {
+      // Commission error (clicked on Red)
+      recordResult('commission_error', reactionTime);
+      showFeedback('Do not click Red!', 'error');
+    }
+  };
+
+  const recordResult = (outcome: TrialResult['outcome'], reactionTime?: number) => {
+    const newResult: TrialResult = {
+      trialNumber: currentTrialIndex + 1,
+      type: trialConfig[currentTrialIndex].type,
+      outcome,
+      reactionTime
+    };
+
+    setResults(prev => [...prev, newResult]);
+    setPhase('feedback');
+    setWaitingForNext(true);
+
+    // Auto-advance after feedback
+    setTimeout(() => {
+      if (currentTrialIndex < TOTAL_TRIALS - 1) {
+        setCurrentTrialIndex(prev => prev + 1);
+        startTrial();
       } else {
         setPhase('results');
       }
-    }
+    }, 1500);
+  };
+
+  const showFeedback = (message: string, type: 'success' | 'error' | 'neutral') => {
+    setFeedback({ message, type });
   };
 
   const handleComplete = () => {
-    const avgTime = reactionTimes.reduce((sum, time) => sum + time, 0) / reactionTimes.length;
-    const score = Math.max(0, 100 - (avgTime - 200) / 5); // Score based on reaction time
-    onComplete(avgTime, Math.min(100, Math.max(0, score)));
+    // Calculate metrics
+    const goTrials = results.filter(r => r.type === 'go');
+    const successfulGoTrials = goTrials.filter(r => r.outcome === 'success');
+
+    const avgReactionTime = successfulGoTrials.length > 0
+      ? successfulGoTrials.reduce((sum, r) => sum + (r.reactionTime || 0), 0) / successfulGoTrials.length
+      : 0;
+
+    const correctCount = results.filter(r => r.outcome === 'success').length;
+    const accuracy = (correctCount / TOTAL_TRIALS) * 100;
+
+    const commissionErrors = results.filter(r => r.outcome === 'commission_error').length;
+    const omissionErrors = results.filter(r => r.outcome === 'miss').length;
+    const falseStarts = results.filter(r => r.outcome === 'false_start').length;
+
+    // Score calculation (0-100)
+    // Base score on accuracy, penalize heavily for commission errors (impulsivity)
+    let score = accuracy;
+    if (avgReactionTime > 600) score -= 10; // Penalize slow reaction
+    if (avgReactionTime > 1000) score -= 20;
+
+    // Cap score
+    score = Math.max(0, Math.min(100, score));
+
+    onComplete(avgReactionTime, score, {
+      accuracy,
+      commissionErrors,
+      omissionErrors,
+      falseStarts,
+      totalTrials: TOTAL_TRIALS
+    });
   };
+
+  // Cleanup
+  useEffect(() => {
+    return () => clearTimers();
+  }, []);
 
   if (phase === 'instructions') {
     return (
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
-            <Zap className="h-6 w-6 text-yellow-600" />
-            Reaction Time Test
+            <Zap className="h-6 w-6 text-blue-600" />
+            Go/No-Go Inhibition Task
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h3 className="font-semibold text-yellow-900 mb-2">Instructions:</h3>
-            <ul className="list-disc list-inside space-y-2 text-yellow-800">
-              <li>Click the shape as soon as it appears on screen</li>
-              <li>Wait for the "Wait..." message to disappear first</li>
-              <li>Don't click too early or the trial restarts</li>
-              <li>Complete {NUM_TRIALS} trials</li>
-              <li>This tests processing speed and attention</li>
+        <CardContent className="space-y-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <h3 className="font-semibold text-blue-900 mb-4 text-lg">Instructions:</h3>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="bg-white p-4 rounded-lg border-2 border-green-200 flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-green-500 rounded-full mb-2 shadow-md"></div>
+                <p className="font-bold text-green-700">GREEN = GO</p>
+                <p className="text-sm text-slate-600">Click as FAST as you can!</p>
+              </div>
+              <div className="bg-white p-4 rounded-lg border-2 border-red-200 flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-red-500 rounded-full mb-2 shadow-md"></div>
+                <p className="font-bold text-red-700">RED = NO-GO</p>
+                <p className="text-sm text-slate-600">Do NOT click!</p>
+              </div>
+            </div>
+            <ul className="list-disc list-inside space-y-2 text-blue-800">
+              <li>Wait for the shape to appear.</li>
+              <li>If you click too early, it counts as an error.</li>
+              <li>You have 2 seconds to respond to Green shapes.</li>
+              <li>There are {TOTAL_TRIALS} trials in total.</li>
             </ul>
           </div>
-          
-          <Button onClick={() => { setPhase('ready'); }} className="w-full bg-yellow-600 hover:bg-yellow-700">
-            Start Test
+
+          <Button onClick={() => setPhase('ready')} className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6">
+            I Understand - Start Test
           </Button>
         </CardContent>
       </Card>
@@ -117,162 +243,150 @@ export default function ReactionTimeTest({ onComplete }: ReactionTimeTestProps) 
   if (phase === 'ready') {
     return (
       <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-center">
-            Trial {trial + 1} of {NUM_TRIALS}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center min-h-[400px]">
-            <Button 
-              onClick={startTrial} 
-              size="lg"
-              className="bg-blue-600 hover:bg-blue-700 text-xl px-8 py-6"
-            >
-              Ready - Click to Start
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (phase === 'wait') {
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-center">
-            Trial {trial + 1} of {NUM_TRIALS}
-          </CardTitle>
-        </CardHeader>
-        <CardContent onClick={handleClick}>
-          <div className="flex flex-col items-center justify-center min-h-[400px] bg-slate-100 rounded-lg cursor-pointer">
-            {tooSoon ? (
-              <div className="text-3xl font-bold text-red-600 animate-pulse">
-                Too Soon! Wait for the shape...
-              </div>
-            ) : (
-              <div className="text-3xl font-bold text-slate-600 animate-pulse">
-                Wait...
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (phase === 'click') {
-    const renderShape = () => {
-      const baseClasses = `${currentColor} cursor-pointer hover:scale-110 transition-transform shadow-2xl absolute`;
-      // ✅ Apply random position with transform to center the shape at the position
-      const positionStyle = {
-        top: stimulusPosition.top,
-        left: stimulusPosition.left,
-        transform: 'translate(-50%, -50%)', // Center the shape at the random position
-      };
-      
-      switch (currentShape) {
-        case 'circle':
-          return <div className={`${baseClasses} w-32 h-32 rounded-full`} style={positionStyle} />;
-        case 'square':
-          return <div className={`${baseClasses} w-32 h-32 rounded-lg`} style={positionStyle} />;
-        case 'triangle':
-          return (
-            <div 
-              className={`${baseClasses} w-0 h-0`}
-              style={{
-                ...positionStyle,
-                borderLeft: '64px solid transparent',
-                borderRight: '64px solid transparent',
-                borderBottom: '110px solid currentColor',
-              }}
-            />
-          );
-        default:
-          return <div className={`${baseClasses} w-32 h-32 rounded-full`} style={positionStyle} />;
-      }
-    };
-
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-center">
-            Trial {trial + 1} of {NUM_TRIALS}
-          </CardTitle>
-          <p className="text-center text-lg font-bold text-green-600">CLICK NOW!</p>
-        </CardHeader>
-        <CardContent onClick={handleClick}>
-          <div className="relative min-h-[400px] bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg cursor-pointer overflow-hidden">
-            {renderShape()}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (phase === 'results') {
-    const avgTime = reactionTimes.reduce((sum, time) => sum + time, 0) / reactionTimes.length;
-    const bestTime = Math.min(...reactionTimes);
-    const worstTime = Math.max(...reactionTimes);
-    
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-center text-2xl">Results</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-green-600">{bestTime.toFixed(0)}ms</div>
-              <p className="text-xs text-slate-600">Best Time</p>
-            </div>
-            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">{avgTime.toFixed(0)}ms</div>
-              <p className="text-xs text-slate-600">Average Time</p>
-            </div>
-            <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">{worstTime.toFixed(0)}ms</div>
-              <p className="text-xs text-slate-600">Slowest Time</p>
-            </div>
-          </div>
-          
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-sm text-yellow-900">
-              <strong>Processing Speed Assessment:</strong>
-              <br />
-              {avgTime < 250 ? 'Excellent reaction time - very fast processing!' :
-               avgTime < 350 ? 'Good reaction time - normal processing speed.' :
-               avgTime < 500 ? 'Fair reaction time - slightly slower processing.' :
-               'Slower reaction time detected. Consider consulting a healthcare professional.'}
-            </p>
-          </div>
-          
-          <div className="space-y-2">
-            <h4 className="font-semibold text-slate-700">Individual Trial Times:</h4>
-            <div className="grid grid-cols-4 gap-2">
-              {reactionTimes.map((time, index) => (
-                <div
-                  key={index}
-                  className={`p-2 rounded text-center text-sm font-semibold ${
-                    time === bestTime ? 'bg-green-100 text-green-700' :
-                    time === worstTime ? 'bg-red-100 text-red-700' :
-                    'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  {time.toFixed(0)}ms
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <Button onClick={handleComplete} className="w-full bg-yellow-600 hover:bg-yellow-700">
-            Continue to Next Test
+        <CardContent className="min-h-[400px] flex flex-col items-center justify-center">
+          <h2 className="text-2xl font-bold text-slate-800 mb-6">Get Ready!</h2>
+          <p className="text-slate-600 mb-8">Place your hand on the mouse/trackpad.</p>
+          <Button
+            onClick={startTrial}
+            size="lg"
+            className="bg-blue-600 hover:bg-blue-700 text-xl px-12 py-8 rounded-xl shadow-lg hover:shadow-xl transition-all"
+          >
+            Start
           </Button>
         </CardContent>
       </Card>
     );
   }
 
-  return <div>Loading...</div>;
+  if (phase === 'results') {
+    const goTrials = results.filter(r => r.type === 'go');
+    const successfulGoTrials = goTrials.filter(r => r.outcome === 'success');
+    const avgTime = successfulGoTrials.length > 0
+      ? successfulGoTrials.reduce((sum, r) => sum + (r.reactionTime || 0), 0) / successfulGoTrials.length
+      : 0;
+
+    const commissionErrors = results.filter(r => r.outcome === 'commission_error').length;
+    const accuracy = (results.filter(r => r.outcome === 'success').length / TOTAL_TRIALS) * 100;
+
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="text-center text-2xl">Test Complete</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 text-center">
+              <div className="text-3xl font-bold text-blue-600">{avgTime.toFixed(0)}ms</div>
+              <p className="text-xs text-slate-600 font-semibold uppercase mt-1">Avg Reaction Time</p>
+            </div>
+            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 text-center">
+              <div className="text-3xl font-bold text-green-600">{accuracy.toFixed(0)}%</div>
+              <p className="text-xs text-slate-600 font-semibold uppercase mt-1">Accuracy</p>
+            </div>
+            <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 text-center">
+              <div className="text-3xl font-bold text-red-600">{commissionErrors}</div>
+              <p className="text-xs text-slate-600 font-semibold uppercase mt-1">Impulse Errors</p>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+            <h4 className="font-semibold text-slate-700 mb-2">Performance Analysis:</h4>
+            <p className="text-sm text-slate-600">
+              {commissionErrors > 2
+                ? "High number of impulsive errors detected. This may indicate difficulty with inhibition."
+                : "Good impulse control shown."}
+              <br />
+              {avgTime > 500 && " Reaction time is slower than average."}
+            </p>
+          </div>
+
+          <Button onClick={handleComplete} className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6">
+            Save & Continue
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Active Test Phase (Wait, Stimulus, Feedback)
+  const currentConfig = trialConfig[currentTrialIndex];
+  const isGo = currentConfig?.type === 'go';
+  const shapeColor = isGo ? 'bg-green-500' : 'bg-red-500';
+
+  const renderShape = () => {
+    const baseClasses = `${shapeColor} cursor-pointer shadow-2xl absolute transform -translate-x-1/2 -translate-y-1/2 transition-transform active:scale-95`;
+    const style = { top: stimulusPosition.top, left: stimulusPosition.left };
+
+    switch (currentConfig?.shape) {
+      case 'square':
+        return <div className={`${baseClasses} w-32 h-32 rounded-lg`} style={style} onClick={handleStimulusClick} />;
+      case 'triangle':
+        return (
+          <div
+            className={`${baseClasses} w-0 h-0 bg-transparent shadow-none`}
+            style={{
+              ...style,
+              borderLeft: '64px solid transparent',
+              borderRight: '64px solid transparent',
+              borderBottom: `110px solid ${isGo ? '#22c55e' : '#ef4444'}`,
+            }}
+            onClick={handleStimulusClick}
+          />
+        );
+      case 'circle':
+      default:
+        return <div className={`${baseClasses} w-32 h-32 rounded-full`} style={style} onClick={handleStimulusClick} />;
+    }
+  };
+
+  return (
+    <Card className="w-full select-none">
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-lg">Trial {currentTrialIndex + 1} / {TOTAL_TRIALS}</CardTitle>
+          <div className="text-sm font-medium text-slate-500">
+            {currentConfig?.type === 'go' ? 'Target: Green' : 'Target: Red (Ignore)'}
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        <div
+          ref={containerRef}
+          className="relative min-h-[400px] bg-slate-100 rounded-xl overflow-hidden cursor-crosshair border-2 border-slate-200"
+          onClick={handleGlobalClick}
+        >
+          {/* Instructions Overlay for Wait Phase */}
+          {phase === 'wait' && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <p className="text-slate-400 font-medium text-lg animate-pulse">Wait for it...</p>
+            </div>
+          )}
+
+          {/* Stimulus */}
+          {phase === 'stimulus' && renderShape()}
+
+          {/* Feedback Overlay */}
+          {(phase === 'feedback' || feedback) && feedback && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm z-10">
+              <div className="text-center animate-in zoom-in duration-200">
+                {feedback.type === 'success' ? (
+                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-2" />
+                ) : feedback.type === 'error' ? (
+                  <XCircle className="w-16 h-16 text-red-500 mx-auto mb-2" />
+                ) : (
+                  <AlertCircle className="w-16 h-16 text-blue-500 mx-auto mb-2" />
+                )}
+                <p className={`text-2xl font-bold ${feedback.type === 'success' ? 'text-green-600' :
+                    feedback.type === 'error' ? 'text-red-600' : 'text-blue-600'
+                  }`}>
+                  {feedback.message}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
